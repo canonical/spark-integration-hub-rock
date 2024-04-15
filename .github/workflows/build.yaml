@@ -1,0 +1,60 @@
+name: Build ROCK
+
+on:
+  pull_request:
+  workflow_call:
+    outputs:
+      rock:
+        description: "The rock output of build process."
+        value: ${{ jobs.build.outputs.rock }}
+
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install yamllint
+        run: python3 -m pip install yamllint
+      - name: YAML Lint
+        run:  |
+          yamllint -d "{extends: relaxed, rules: {line-length: {max: 250}}}" \
+            --no-warnings rockcraft.yaml
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs:
+      - lint
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup LXD
+        uses: canonical/setup-lxd@main
+
+      - name: Install dependencies
+        run: |
+          sudo snap install yq
+          sudo snap install rockcraft --classic --edge    
+          sudo snap install --devmode --channel edge skopeo
+
+      - name: Build image
+        id: build
+        run: |
+          rockcraft pack --verbose
+          VERSION=$(yq '.version' rockcraft.yaml)
+          echo "name=spark-integration-hub_${VERSION}_amd64.rock" >> $GITHUB_OUTPUT
+
+      - name: Change artifact permissions
+        run: sudo chmod a+r ${{ steps.build.outputs.name }}
+
+      - name: Upload locally built artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spark-integration-hub
+          path:  ${{ steps.build.outputs.name }}
+    outputs:
+      rock: ${{ steps.build.outputs.name }}
