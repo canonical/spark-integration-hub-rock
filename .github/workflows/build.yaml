@@ -38,7 +38,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo snap install yq
-          sudo snap install rockcraft --classic --edge    
+          sudo snap install rockcraft --classic    
           sudo snap install --devmode --channel edge skopeo
 
       - name: Build image
