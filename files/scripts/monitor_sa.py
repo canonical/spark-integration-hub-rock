@@ -14,8 +14,8 @@ from lightkube.core.client import Client
 from lightkube.core.exceptions import ApiError
 from lightkube.resources.core_v1 import Secret, ServiceAccount
 
-from spark8t.utils import PercentEncodingSerializer
 from spark8t.literals import HUB_LABEL
+from spark8t.domain import PropertyFile
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -29,16 +29,7 @@ def read_configuration_file(file_path: str) -> Optional[Dict[str, str]]:
     """Read spark configuration file."""
     if not os.path.exists(file_path):
         return None
-    kubernetes_key_serializer = PercentEncodingSerializer("_")
-    with open(file_path, "r") as f:
-        lines = f.readlines()
-        confs = {}
-        for line in lines:
-            if "=" in line:
-                key_value = line.split("=")
-                # encode key
-                confs[kubernetes_key_serializer.serialize(key_value[0])] = key_value[1]
-        return confs
+    return PropertyFile.read(file_path).props
 
 
 if __name__ == "__main__":
