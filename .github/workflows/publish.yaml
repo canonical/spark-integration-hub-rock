@@ -60,9 +60,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install skopeo
+      - name: Install rockcraft
         run: |
-          sudo snap install --devmode --channel edge skopeo
+          sudo snap install --channel edge rockcraft
 
       - name: Install yq
         run: |
@@ -92,7 +92,7 @@ jobs:
           echo "ROCK: ${{ needs.build.outputs.rock }}"
           ROCK_FILE=${{ needs.build.outputs.rock }}
           echo "Rock file: $ROCK_FILE"
-          sudo skopeo --insecure-policy copy \
+          sudo rockcraft.skopeo --insecure-policy copy \
             oci-archive:${ROCK_FILE} \
             docker-daemon:${IMAGE_NAME}:${TAG}
           echo "1"
