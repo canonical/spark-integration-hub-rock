@@ -62,7 +62,7 @@ jobs:
 
       - name: Install rockcraft
         run: |
-          sudo snap install --channel edge rockcraft
+          sudo snap install --channel edge rockcraft --classic
 
       - name: Install yq
         run: |
