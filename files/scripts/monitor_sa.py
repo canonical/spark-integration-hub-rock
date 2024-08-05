@@ -16,6 +16,7 @@ from lightkube.resources.core_v1 import Secret, ServiceAccount
 
 from spark8t.literals import HUB_LABEL
 from spark8t.domain import PropertyFile
+from spark8t.utils import PercentEncodingSerializer
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -63,7 +64,10 @@ if __name__ == "__main__":
         logger.info(f"Service account: {sa_name} --- namespace: {namespace}")
         # skip in case of deletion or operation that do not need secret update.
         logger.info(f"Config file: {args.config}")
-        options = read_configuration_file(args.config)
+        options = {
+            PercentEncodingSerializer().serialize(key): value
+            for key, value in read_configuration_file(args.config).items()
+        }
         if options:
             logger.info(f"Number of options: {len(options)}")
         else:
