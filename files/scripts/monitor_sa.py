@@ -25,6 +25,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] (%(threadName)s) (%(funcName)s) %(message)s",
 )
 
+TIMEOUT_DEFAULT_SECONDS = 30
 
 def read_configuration_file(file_path: str) -> Optional[Dict[str, str]]:
     """Read spark configuration file."""
@@ -52,12 +53,28 @@ if __name__ == "__main__":
         help="The configuration path.",
         type=str,
     )
+    parser.add_argument(
+        "-t",
+        "--timeout",
+        help="The timeout in seconds for the client to close the request to watch the K8s resource.",
+        default=TIMEOUT_DEFAULT_SECONDS,
+        type=int
+)
     args = parser.parse_args()
     logger.info("Start process that update service account secrets.")
     client = Client(field_manager=args.app_name)  # type: ignore
     label_selector = {"app.kubernetes.io/managed-by": "spark8t"}
 
-    for op, sa in client.watch(ServiceAccount, namespace="*", labels=label_selector):
+    for op, sa in client.watch(
+        ServiceAccount, 
+        namespace="*", 
+        labels=label_selector, 
+
+        # This timeout is needed for the client to not hang up indefinitely when the K8s server
+        # stops responding to the watch request due to inactivity for long period of time.
+        # https://github.com/canonical/spark-k8s-bundle/issues/72
+        server_timeout=TIMEOUT_DEFAULT_SECONDS
+    ):
         sa_name = sa.metadata.name
         namespace = sa.metadata.namespace
         logger.info(f"Operation: {op}")
