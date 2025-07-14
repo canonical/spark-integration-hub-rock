@@ -1,4 +1,4 @@
-name: Publish ROCK
+name: Publish rock
 on:
   push:
     branches:
@@ -22,7 +22,7 @@ jobs:
           echo "track=${BRANCH%*\/*}" >> $GITHUB_OUTPUT
         id: branch_metadata
 
-      - name: Extract ROCK metadata
+      - name: Extract rock metadata
         shell: bash
         run: |
           VERSION=$(yq '(.version|split("-"))[0]' rockcraft.yaml)
