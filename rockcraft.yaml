@@ -28,6 +28,7 @@ services:
     on-failure: restart
     environment:
       SPARK_PROPERTIES_FILE: /etc/hub/conf/spark-defaults.conf
+      SA_ALLOWLIST: /etc/hub/conf/allowlist
 
 
 parts:
