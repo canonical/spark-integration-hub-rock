@@ -2,15 +2,14 @@ name: Publish rock
 on:
   push:
     branches:
-      - '3/*'
+      - "3/*"
 
 jobs:
-
   release_checks:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Extract branch metadata
         shell: bash
@@ -57,7 +56,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install rockcraft
         run: |
@@ -97,19 +96,19 @@ jobs:
           echo "1"
           COMMIT_ID=$(git log -1 --format=%H)
           DESCRIPTION=$(yq .description rockcraft.yaml | xargs)
-          
+
           # Add relevant labels
           echo "FROM ${IMAGE_NAME}:${TAG}" | docker build --label org.opencontainers.image.description="${DESCRIPTION}" --label org.opencontainers.image.revision="${COMMIT_ID}" --label org.opencontainers.image.source="${{ github.repositoryUrl }}" -t "${IMAGE_NAME}:${TAG}" -
           echo "2"
-          echo "Publishing ${IMAGE_NAME}:${TAG}"          
+          echo "Publishing ${IMAGE_NAME}:${TAG}"
           docker push ${IMAGE_NAME}:${TAG}
-          
-          if [[ "$RISK" == "edge" ]]; then           
+
+          if [[ "$RISK" == "edge" ]]; then
             VERSION_TAG="${{ needs.release_checks.outputs.version }}-${{ needs.release_checks.outputs.base }}_edge"
-            
+
             docker tag ${IMAGE_NAME}:${TAG} ${IMAGE_NAME}:${VERSION_TAG}
-            
-            echo "Publishing ${IMAGE_NAME}:${VERSION_TAG}"          
+
+            echo "Publishing ${IMAGE_NAME}:${VERSION_TAG}"
             docker push ${IMAGE_NAME}:${VERSION_TAG}
           fi
           echo "3"
