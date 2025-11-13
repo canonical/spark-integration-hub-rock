@@ -10,8 +10,8 @@ import logging
 import os
 import re
 import sys
-from typing import NamedTuple, cast
 from pathlib import Path
+from typing import NamedTuple, cast
 
 from lightkube.core.client import Client, LabelValue
 from lightkube.core.exceptions import ApiError
@@ -110,8 +110,10 @@ if __name__ == "__main__":
     try:
         with allowlist_path.open("r") as f:
             allowlist = [entry.strip() for entry in f.read().splitlines()]
-    except FileNotFoundError:
-        logger.error("Could not find allowlist.")
+    except (FileNotFoundError, IsADirectoryError):
+        # IsADirectoryError happens when the env var is not defined:
+        # Path("") is Path(".")
+        logger.warning("Could not find allowlist, proceeding without it.")
         allowlist = []
 
     patterns = build_patterns(allowlist)
