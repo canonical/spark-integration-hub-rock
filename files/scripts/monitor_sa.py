@@ -30,15 +30,15 @@ logging.basicConfig(
 TIMEOUT_DEFAULT_SECONDS = 30
 
 
-class SANames(NamedTuple):
+class ServiceAccountNames(NamedTuple):
     """Service Account denomination."""
 
     namespace: str
     name: str
 
 
-class SAPatterns(NamedTuple):
-    """Service account shell-style patterns."""
+class ServiceAccountPatterns(NamedTuple):
+    """Service account shell-style patterns for the namespace and the actual resource name."""
 
     namespace: str
     name: str
@@ -51,17 +51,19 @@ def read_configuration_file(file_path: str) -> dict[str, str]:
     return PropertyFile.read(file_path).props
 
 
-def build_patterns(allowlist: list[str]) -> list[SAPatterns]:
+def build_patterns(allowlist: list[str]) -> list[ServiceAccountPatterns]:
     """Build shell-style patterns from allowlist."""
     patterns = []
     for entry in allowlist:
         ns, _, sa = entry.partition(":")
-        patterns.append(SAPatterns(fnmatch.translate(ns), fnmatch.translate(sa)))
+        patterns.append(ServiceAccountPatterns(fnmatch.translate(ns), fnmatch.translate(sa)))
 
     return patterns
 
 
-def is_allowed(service_account: SANames, patterns: list[SAPatterns]) -> bool:
+def is_allowed(
+    service_account: ServiceAccountNames, patterns: list[ServiceAccountPatterns]
+) -> bool:
     """Compare a service account against a list of shell-style patterns."""
     return any(
         re.match(sa_patterns.namespace, service_account.namespace)
@@ -132,7 +134,7 @@ if __name__ == "__main__":
         logger.info(f"Operation: {op}")
         logger.info(f"Service account: {sa_name} --- namespace: {namespace}")
 
-        if not is_allowed(SANames(namespace, sa_name), patterns):
+        if not is_allowed(ServiceAccountNames(namespace, sa_name), patterns):
             logger.info("Not allowed, skipping.")
             continue
 
