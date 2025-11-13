@@ -94,7 +94,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-l",
         "--allowlist",
-        help="The service account allowlist path.",
+        help="The path of the file where the service account allowlist is specified.",
         type=str,
     )
     parser.add_argument(
