@@ -2,7 +2,7 @@
 # See LICENSE file for licensing details.
 import pytest
 
-from monitor_sa import SANames, build_patterns, is_allowed
+from monitor_sa import ServiceAccountNames, build_patterns, is_allowed
 
 
 @pytest.mark.parametrize(
@@ -28,7 +28,7 @@ def test_is_allowed(raw_service_account: str, allowlist: list[str], expected: bo
     # Given
     patterns = build_patterns(allowlist)
     ns, _, sa = raw_service_account.partition(":")
-    service_account = SANames(ns, sa)
+    service_account = ServiceAccountNames(ns, sa)
 
     # When
     result = is_allowed(service_account, patterns)
