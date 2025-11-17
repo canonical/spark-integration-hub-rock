@@ -15,7 +15,6 @@ platforms:
 run_user: _daemon_
 
 environment:
-  JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
   PYTHONPATH: /opt/spark/python:/opt/spark8t/python/dist:/usr/lib/python3.10/site-packages
   PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
@@ -29,6 +28,7 @@ services:
     on-failure: restart
     environment:
       SPARK_PROPERTIES_FILE: /etc/hub/conf/spark-defaults.conf
+      SA_ALLOWLIST: /etc/hub/conf/allowlist
 
 
 parts:
@@ -86,7 +86,6 @@ parts:
     after: [ hub-files ]
     overlay-packages:
       - python3
-      - openjdk-17-jre-headless
 
     override-prime: |
       # Please refer to https://discourse.ubuntu.com/t/unifying-user-identity-across-snaps-and-rocks/36469

@@ -5,17 +5,19 @@
 """Routine that updates secrets for Spark service accounts."""
 
 import argparse
+import fnmatch
 import logging
 import os
+import re
 import sys
-from typing import Dict, Optional
+from pathlib import Path
+from typing import NamedTuple, cast
 
-from lightkube.core.client import Client
+from lightkube.core.client import Client, LabelValue
 from lightkube.core.exceptions import ApiError
 from lightkube.resources.core_v1 import Secret, ServiceAccount
-
-from spark8t.literals import HUB_LABEL
 from spark8t.domain import PropertyFile
+from spark8t.literals import HUB_LABEL
 from spark8t.utils import PercentEncodingSerializer
 
 logger = logging.getLogger(__name__)
@@ -27,11 +29,47 @@ logging.basicConfig(
 
 TIMEOUT_DEFAULT_SECONDS = 30
 
-def read_configuration_file(file_path: str) -> Optional[Dict[str, str]]:
+
+class ServiceAccountNames(NamedTuple):
+    """Service Account denomination."""
+
+    namespace: str
+    name: str
+
+
+class ServiceAccountPatterns(NamedTuple):
+    """Service account shell-style patterns for the namespace and the actual resource name."""
+
+    namespace: str
+    name: str
+
+
+def read_configuration_file(file_path: str) -> dict[str, str]:
     """Read spark configuration file."""
     if not os.path.exists(file_path):
-        return None
+        return {}
     return PropertyFile.read(file_path).props
+
+
+def build_patterns(allowlist: list[str]) -> list[ServiceAccountPatterns]:
+    """Build shell-style patterns from allowlist."""
+    patterns = []
+    for entry in allowlist:
+        ns, _, sa = entry.partition(":")
+        patterns.append(ServiceAccountPatterns(fnmatch.translate(ns), fnmatch.translate(sa)))
+
+    return patterns
+
+
+def is_allowed(
+    service_account: ServiceAccountNames, patterns: list[ServiceAccountPatterns]
+) -> bool:
+    """Compare a service account against a list of shell-style patterns."""
+    return any(
+        re.match(sa_patterns.namespace, service_account.namespace)
+        and re.match(sa_patterns.name, service_account.name)
+        for sa_patterns in patterns
+    )
 
 
 if __name__ == "__main__":
@@ -54,31 +92,52 @@ if __name__ == "__main__":
         type=str,
     )
     parser.add_argument(
+        "-l",
+        "--allowlist",
+        help="The path of the file where the service account allowlist is specified.",
+        type=str,
+    )
+    parser.add_argument(
         "-t",
         "--timeout",
         help="The timeout in seconds for the client to close the request to watch the K8s resource.",
         default=TIMEOUT_DEFAULT_SECONDS,
-        type=int
-)
+        type=int,
+    )
     args = parser.parse_args()
     logger.info("Start process that update service account secrets.")
     client = Client(field_manager=args.app_name)  # type: ignore
-    label_selector = {"app.kubernetes.io/managed-by": "spark8t"}
+    label_selector: dict[str, LabelValue] = {"app.kubernetes.io/managed-by": "spark8t"}
+    allowlist_path = Path(args.allowlist)
+    try:
+        with allowlist_path.open("r") as f:
+            allowlist = [entry.strip() for entry in f.read().splitlines()]
+    except (FileNotFoundError, IsADirectoryError):
+        # IsADirectoryError happens when the env var is not defined:
+        # Path("") is Path(".")
+        logger.warning("Could not find allowlist, proceeding without it.")
+        allowlist = []
+
+    patterns = build_patterns(allowlist)
 
     for op, sa in client.watch(
-        ServiceAccount, 
-        namespace="*", 
-        labels=label_selector, 
-
+        ServiceAccount,
+        namespace="*",
+        labels=label_selector,
         # This timeout is needed for the client to not hang up indefinitely when the K8s server
         # stops responding to the watch request due to inactivity for long period of time.
         # https://github.com/canonical/spark-k8s-bundle/issues/72
-        server_timeout=TIMEOUT_DEFAULT_SECONDS
+        server_timeout=TIMEOUT_DEFAULT_SECONDS,
     ):
-        sa_name = sa.metadata.name
-        namespace = sa.metadata.namespace
+        sa_name = cast(str, getattr(sa.metadata, "name"))
+        namespace = cast(str, getattr(sa.metadata, "namespace"))
         logger.info(f"Operation: {op}")
         logger.info(f"Service account: {sa_name} --- namespace: {namespace}")
+
+        if not is_allowed(ServiceAccountNames(namespace, sa_name), patterns):
+            logger.info("Not allowed, skipping.")
+            continue
+
         # skip in case of deletion or operation that do not need secret update.
         logger.info(f"Config file: {args.config}")
         options = {
@@ -111,7 +170,7 @@ if __name__ == "__main__":
                 "metadata": {
                     "name": secret_name,
                     "namespace": namespace,
-                    "labels": {"app.kubernetes.io/managed-by": "integration-hub"}
+                    "labels": {"app.kubernetes.io/managed-by": "integration-hub"},
                 },
                 "stringData": options if options else {},
             }
