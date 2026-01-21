@@ -11,6 +11,7 @@ base: ubuntu@22.04
 
 platforms:
   amd64:
+  arm64:
 
 run_user: _daemon_
 
@@ -29,7 +30,6 @@ services:
     environment:
       SPARK_PROPERTIES_FILE: /etc/hub/conf/spark-defaults.conf
       SA_ALLOWLIST: /etc/hub/conf/allowlist
-
 
 parts:
   spark8t:
@@ -55,8 +55,8 @@ parts:
       mkdir -p $CRAFT_PART_INSTALL/usr/local/bin
       cd $CRAFT_PART_INSTALL/usr/local/bin
       KUBECTL_VERSION=$(wget -qO- https://dl.k8s.io/release/stable.txt)
-      wget -q "https://dl.k8s.io/release/$KUBECTL_VERSION/bin/linux/amd64/kubectl"
-      wget -q  "https://dl.k8s.io/$KUBECTL_VERSION/bin/linux/amd64/kubectl.sha256"
+      wget -q "https://dl.k8s.io/release/$KUBECTL_VERSION/bin/linux/$CRAFT_ARCH_BUILD_FOR/kubectl"
+      wget -q  "https://dl.k8s.io/$KUBECTL_VERSION/bin/linux/$CRAFT_ARCH_BUILD_FOR/kubectl.sha256"
       echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check
       if  [[ $? -ne 0 ]]
         then
@@ -70,11 +70,11 @@ parts:
 
   hub-files:
     plugin: dump
-    after: [ spark8t]
+    after: [spark8t]
     source: files
     organize:
-      scripts/monitor_sa.py : opt/hub/scripts/monitor_sa.py
-      bin/monitor_sa.sh : opt/hub/bin/monitor_sa.sh
+      scripts/monitor_sa.py: opt/hub/scripts/monitor_sa.py
+      bin/monitor_sa.sh: opt/hub/bin/monitor_sa.sh
       spark/conf/spark-defaults.conf: etc/hub/conf/spark-defaults.conf
     stage:
       - opt/hub/scripts/monitor_sa.py
@@ -83,7 +83,7 @@ parts:
 
   user-setup:
     plugin: nil
-    after: [ hub-files ]
+    after: [hub-files]
     overlay-packages:
       - python3
 
@@ -100,5 +100,3 @@ parts:
 
       chown -R ${HUB_GID}:${HUB_UID} etc/
       chmod -R 750 etc/
-
-
