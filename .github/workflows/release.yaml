@@ -34,8 +34,6 @@ jobs:
 
       - name: Download artifact
         uses: actions/download-artifact@v7
-        with:
-          pattern:  packeted-rocks/*.rock
 
       - name: Publish Image to Channel
         run: |
