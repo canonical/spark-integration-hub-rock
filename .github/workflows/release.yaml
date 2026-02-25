@@ -33,15 +33,15 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
-          pattern:  ${{ needs.build.outputs.artifact-prefix }}
+          pattern:  packeted-rocks/*.rock
 
       - name: Publish Image to Channel
         run: |
           ls
           # Unpack artifact
-          mv charmed-spark/${{ steps.artifact.outputs.base_artifact_name }} .
+          # mv charmed-spark/${{ steps.artifact.outputs.base_artifact_name }} .
           ROCK_FILE=$(ls *.rock)
           echo "Rock file: ${ROCK_FILE}"
           IMAGE_NAME="ghcr.io/welpaolo/charmed-spark-integration-hub"
