@@ -1,7 +1,7 @@
 name: spark-integration-hub
 summary: Charmed Spark Integration Hub
 description: |
-  This is an OCI image that bundles the routines that are needed by the Spark Integration Hub to update secrets besed on the provided configurations.
+  This is an OCI image that bundles the routines that are needed by the Spark Integration Hub to update secrets based on the provided configurations.
 
 license: Apache-2.0
 
