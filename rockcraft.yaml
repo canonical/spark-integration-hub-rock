@@ -11,14 +11,14 @@ base: ubuntu@22.04
 
 platforms:
   amd64:
-  # arm64:
+  arm64:
 
 run_user: _daemon_
 
 environment:
   PYTHONPATH: /opt/spark/python:/opt/spark8t/python/dist:/usr/lib/python3.10/site-packages
   PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-  JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+  JAVA_HOME: /usr/lib/jvm/java-17-openjdk-${CRAFT_ARCH_BUILD_FOR}
 
 services:
   integration-hub:
