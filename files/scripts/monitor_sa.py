@@ -83,9 +83,6 @@ def create_secret_from_file(secret_name: str, file_path: Path, namespace: str) -
     # The output needs to be a decoded utf-8 string for the JSON serialization
     encoded_content = base64.b64encode(file_content).decode("utf-8")
 
-    # Extract the filename to use as the key (default kubectl behavior)
-    file_key = os.path.basename(file_path)
-
     # Construct the Secret object
     secret = Secret(
         metadata=ObjectMeta(
@@ -94,7 +91,7 @@ def create_secret_from_file(secret_name: str, file_path: Path, namespace: str) -
             labels={"app.kubernetes.io/managed-by": "integration-hub"},
         ),
         type="Opaque",
-        data={file_key: encoded_content},
+        data={file_path.name: encoded_content},
     )
 
     return secret
@@ -202,7 +199,7 @@ if __name__ == "__main__":
             logger.info(f"retrieved secrets: {s}")
             client.delete(Secret, name=secret_name, namespace=namespace)
             # update trustore secret if the file path is provided in the configuration.
-            if truststore_path and Path(truststore_path).exists():
+            if truststore_path and truststore_path.exists():
                 # we need to delete the truststore secret only if there is no other service account that needs it.
                 # for simplicity, we check if there exist other labeled service account in the same namespace.
                 sa_list = client.list(ServiceAccount, namespace=namespace, labels=label_selector)
@@ -246,7 +243,7 @@ if __name__ == "__main__":
         client.create(s)
 
         # Create secret for truststore if the file path is provided in the configuration.
-        if truststore_path and Path(truststore_path).exists():
+        if truststore_path and truststore_path.exists():
             logger.info(f"Updating secret for truststore: {truststore_secret_name}")
             # Check if the secret already exists, if yes, we delete and re-create it.
             try:
