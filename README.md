@@ -18,3 +18,9 @@ Then, to build the Spark Integration rock image, simply use
 ```bash
 rockcraft pack
 ```
+
+This will create a `.rock` file that is an OCI compliant image. To upload the file to your local Docker registry use skopeo that is bundled in the `rockcraft` snap:
+
+```bash
+sudo rockcraft.skopeo --insecure-policy copy oci-archive:<file> docker-daemon:<image>:<tag>
+```
