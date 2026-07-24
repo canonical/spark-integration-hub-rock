@@ -7,21 +7,27 @@ concurrency:
 on:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
-      - name: Install yamllint
-        run: python3 -m pip install yamllint
+        uses: actions/checkout@v7
+
+      - name: Install tooling
+        run: |
+          pipx install tox
+          pipx install yamllint
+
       - name: YAML Lint
         run: |
           yamllint -d "{extends: relaxed, rules: {line-length: {max: 250}}}" \
             --no-warnings rockcraft.yaml
-      - name: Install tox
-        run: pipx install tox
+
       - name: Run linters
         run: tox run -e lint
 
@@ -31,12 +37,25 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
+
       - name: Install tox
         run: pipx install tox
+
       - name: Run tests
         run: tox run -e unit
 
   build:
     name: Build rock
-    uses: canonical/data-platform-workflows/.github/workflows/build_rock.yaml@v41.1.0
+    uses: canonical/data-platform-workflows/.github/workflows/build_rock.yaml@v50.2.0
+
+  trivy:
+    name: CVE Scanning
+    needs: [build]
+    uses: ./.github/workflows/trivy.yaml
+    with:
+      artifact-prefix: ${{ needs.build.outputs.artifact-prefix }}
+    permissions:
+      actions: read
+      contents: read
+      security-events: write

@@ -1,0 +1,73 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: Trivy scan
+
+on:
+  workflow_call:
+    inputs:
+      artifact-prefix:
+        description: |
+          Prefix for rock package GitHub artifact(s)
+
+          Use canonical/data-platform-workflows build_rock.yaml to build the rock(s)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Trivy scan
+    permissions:
+      contents: read
+      security-events: write # Required for uploading Trivy SARIF results
+      actions: read
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install rockcraft (for skopeo)
+        run: |
+          sudo snap install rockcraft --classic
+
+      - name: Download rock package(s)
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ inputs.artifact-prefix }}-*
+          merge-multiple: true
+
+      - name: Cache Trivy DB
+        uses: actions/cache@v4
+        with:
+          path: .cache/trivy
+          key: ${{ runner.os }}-trivy-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-trivy-
+
+      - name: Import image locally
+        run: |
+          rockcraft.skopeo --insecure-policy copy \
+            oci-archive:$(find . -type f -name "*${{matrix.arch}}.rock") \
+            docker-daemon:trivy/spark-integration-hub-${{ matrix.arch }}:${{ github.sha }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: "trivy/spark-integration-hub-${{ matrix.arch }}:${{ github.sha }}"
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "MEDIUM,HIGH,CRITICAL"
+          trivyignores: .trivyignore
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: "trivy-results.sarif"
+          category: ${{ matrix.arch }}
