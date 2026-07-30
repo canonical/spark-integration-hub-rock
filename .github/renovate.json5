@@ -1,9 +1,26 @@
 {
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "github>canonical/data-platform//renovate_presets/charm.json5",
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: [
+    "github>canonical/data-platform//renovate_presets/base.json5",
+    "helpers:pinGitHubActionDigests",
   ],
   // Between 1AM and 6:59AM, first Friday of the month
-  "schedule": ["* 1-6 12-17 * 5"],
-  "ignoreDeps": ["ubuntu"],
+  schedule: ["* 1-6 1-7 * 5"],
+  ignoreDeps: ["ubuntu"],
+  baseBranchPatterns: ["/^3\\/edge$/"],
+  useBaseBranchConfig: "merge",
+  enabledManagers: ["github-actions", "custom.regex"],
+  commitMessagePrefix: "[RENOVATE] ",
+  lockFileMaintenance: { enabled: false },
+  customManagers: [
+    {
+      description: "Match Python packages in rockcraft.yaml with `# renovate: datasource=pypi`",
+      customType: "regex",
+      managerFilePatterns: ["rockcraft.yaml"],
+      matchStrings: [
+        "#\\s*renovate:\\s*datasource=pypi\\n\\s+pip install[^\\n]+ (?<depName>[^=\\s]+)==(?<currentValue>[^\\s\\n]+)",
+      ],
+      datasourceTemplate: "pypi",
+    },
+  ],
 }
