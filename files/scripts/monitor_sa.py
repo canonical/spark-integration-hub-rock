@@ -227,17 +227,20 @@ if __name__ == "__main__":
             continue
 
         logger.info(f"Updating secret: {secret_name}")
-        s = Secret.from_dict(
-            {
-                "apiVersion": "v1",
-                "kind": "Secret",
-                "metadata": {
-                    "name": secret_name,
-                    "namespace": namespace,
-                    "labels": {"app.kubernetes.io/managed-by": "integration-hub"},
-                },
-                "stringData": options if options else {},
-            }
+        s = cast(
+            Secret,
+            Secret.from_dict(
+                {
+                    "apiVersion": "v1",
+                    "kind": "Secret",
+                    "metadata": {
+                        "name": secret_name,
+                        "namespace": namespace,
+                        "labels": {"app.kubernetes.io/managed-by": "integration-hub"},
+                    },
+                    "stringData": options if options else {},
+                }
+            ),
         )
         # Create secret
         client.create(s)
