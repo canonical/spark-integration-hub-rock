@@ -1,3 +1,24 @@
+[dependency-groups]
+format = [
+    "ruff",
+]
+lint = [
+    "ruff",
+    "mypy",
+    "spark8t~=1.5.0",
+]
+unit = [
+    "pytest",
+    "lightkube",
+    "spark8t~=1.5.0",
+]
+integration = [
+    "pytest",
+    "lightkube",
+    "spark8t~=1.5.0",
+    "jubilant",
+]
+
 [tool.ruff]
 line-length = 99
 extend-exclude = ["__pycache__", "*.egg_info"]
@@ -23,3 +44,6 @@ extend-ignore = [
 ignore = ["E501", "D107"]
 per-file-ignores = { "tests/*" = ["D100", "D101", "D102", "D103", "D104", "E999"] }
 mccabe.max-complexity = 10
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]

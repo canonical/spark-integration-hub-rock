@@ -1,8 +1,9 @@
 # Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
+
 import pytest
 
-from monitor_sa import ServiceAccountNames, build_patterns, is_allowed
+from app.utils import ServiceAccountNames, build_patterns, is_allowed
 
 
 @pytest.mark.parametrize(

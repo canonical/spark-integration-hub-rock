@@ -1,0 +1,121 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# Deploys the Integration Hub rock image for integration tests.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-integration-hub
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: integration-hub
+  namespace: test-integration-hub
+---
+# Cluster-wide permissions the watcher needs. Required on RBAC-enforced
+# clusters (e.g. Canonical K8s); harmless on permissive microk8s.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: integration-hub
+rules:
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "create", "delete"]
+  - apiGroups: ["security.istio.io"]
+    resources: ["authorizationpolicies"]
+    verbs: ["get", "list", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: integration-hub
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: integration-hub
+subjects:
+  - kind: ServiceAccount
+    name: integration-hub
+    namespace: test-integration-hub
+---
+# namespace:serviceaccount patterns the watcher is allowed to act on.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hub-allowlist
+  namespace: test-integration-hub
+data:
+  allowlist: |
+    test-integration-hub:*
+---
+# Custom Spark properties stuffed into every managed service account's secret.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hub-spark-properties
+  namespace: test-integration-hub
+data:
+  spark-defaults.conf: |
+    spark.executor.instances=2
+    spark.executorEnv.TEST_ENV=foobar
+    spark.kubernetes.driver.label.test-label=foobar
+    spark.kubernetes.executor.label.test-label=foobar
+---
+# Dummy truststore file so the watcher creates the truststore secret.
+# Contents are irrelevant to the test; the watcher just base64-copies the file.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hub-truststore
+  namespace: test-integration-hub
+binaryData:
+  truststore.jks: ZHVtbXktdHJ1c3RzdG9yZQ==  # "dummy-truststore"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: integration-hub
+  namespace: test-integration-hub
+  labels:
+    app: integration-hub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: integration-hub
+  template:
+    metadata:
+      labels:
+        app: integration-hub
+    spec:
+      serviceAccountName: integration-hub
+      containers:
+        - name: integration-hub
+          image: docker.io/library/spark-integration-hub:test
+          imagePullPolicy: Never
+          volumeMounts:
+            - name: allowlist
+              mountPath: /etc/hub/conf/allowlist
+              subPath: allowlist
+            - name: spark-properties
+              mountPath: /etc/hub/conf/spark-defaults.conf
+              subPath: spark-defaults.conf
+            - name: truststore
+              mountPath: /etc/hub/conf/truststore.jks
+              subPath: truststore.jks
+      volumes:
+        - name: allowlist
+          configMap:
+            name: hub-allowlist
+        - name: spark-properties
+          configMap:
+            name: hub-spark-properties
+        - name: truststore
+          configMap:
+            name: hub-truststore

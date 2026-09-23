@@ -16,7 +16,7 @@ platforms:
 run_user: _daemon_
 
 environment:
-  PYTHONPATH: /opt/spark/python:/opt/spark8t/python/dist:/usr/lib/python3.10/site-packages
+  PYTHONPATH: /opt/spark/python:/opt/spark8t/python/dist:/usr/lib/python3.10/site-packages:/opt/hub
   PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
   JAVA_HOME: /usr/lib/jvm/java-17-openjdk-${CRAFT_ARCH_BUILD_FOR}
 
@@ -46,44 +46,30 @@ parts:
     overlay-script: |
       mkdir -p $CRAFT_PART_INSTALL/opt/spark8t/python/dist
       # renovate: datasource=pypi
-      pip install --target=${CRAFT_PART_INSTALL}/opt/spark8t/python/dist spark8t==1.4.1
+      pip install --target=${CRAFT_PART_INSTALL}/opt/spark8t/python/dist spark8t==1.5.0
       rm usr/bin/pip*
     stage:
       - opt/spark8t/python/dist
-
-  kubectl:
-    plugin: nil
-    build-packages:
-      - wget
-    overlay-script: |
-      mkdir -p $CRAFT_PART_INSTALL/usr/local/bin
-      cd $CRAFT_PART_INSTALL/usr/local/bin
-      KUBECTL_VERSION=$(wget -qO- https://dl.k8s.io/release/stable.txt)
-      wget -q "https://dl.k8s.io/release/$KUBECTL_VERSION/bin/linux/$CRAFT_ARCH_BUILD_FOR/kubectl"
-      wget -q  "https://dl.k8s.io/$KUBECTL_VERSION/bin/linux/$CRAFT_ARCH_BUILD_FOR/kubectl.sha256"
-      echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check
-      if  [[ $? -ne 0 ]]
-        then
-          echo "DOWNLOAD ERROR: kubectl could not be downloaded properly! Exiting...." >&2
-          exit 1
-      fi
-      chmod +x kubectl
-      cp -r $CRAFT_PART_INSTALL/usr/ $CRAFT_PART_BUILD
-    stage:
-      - usr/local/bin
 
   hub-files:
     plugin: dump
     after: [spark8t]
     source: files
     organize:
-      scripts/monitor_sa.py: opt/hub/scripts/monitor_sa.py
       bin/monitor_sa.sh: opt/hub/bin/monitor_sa.sh
       spark/conf/spark-defaults.conf: etc/hub/conf/spark-defaults.conf
     stage:
-      - opt/hub/scripts/monitor_sa.py
       - opt/hub/bin/monitor_sa.sh
       - etc/hub/conf/spark-defaults.conf
+
+  hub-app:
+    plugin: dump
+    after: [hub-files]
+    source: app
+    organize:
+      "*": opt/hub/app/
+    stage:
+      - opt/hub/app
 
   user-setup:
     plugin: nil

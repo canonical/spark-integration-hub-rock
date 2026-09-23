@@ -1,0 +1,7 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+summary: integration-rock
+execute: |
+  cd "$SPREAD_PATH"
+  tox run -e integration

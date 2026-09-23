@@ -1,0 +1,149 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+on:
+  workflow_call:
+    inputs:
+      artifact-prefix:
+        description: |
+          Prefix for rock package GitHub artifact(s)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  collect-integration-tests:
+    name: Collect integration test spread jobs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up spread
+        run: |
+          sudo snap install go --classic
+          go install github.com/canonical/spread/cmd/spread@latest
+      - name: Collect spread jobs
+        id: collect-jobs
+        shell: python
+        run: |
+          import json
+          import pathlib
+          import os
+          import subprocess
+
+          spread_jobs = (
+              subprocess.run(
+                  [pathlib.Path.home() / "go/bin/spread", "-list", "github-ci"],
+                  capture_output=True,
+                  check=True,
+                  text=True,
+              )
+              .stdout.strip()
+              .split("\n")
+          )
+          jobs = []
+          for job in spread_jobs:
+              # Example job: "github-ci:ubuntu-22.04:tests/spread/integration-charm:juju36"
+              _, runner, task, variant = job.split(":")
+              # Example task: "integration-charm"
+              task = task.removeprefix("tests/spread/")
+              architecture = "arm64" if runner.endswith("-arm") else "amd64"
+
+              # Example: "integration-charm:juju36 | amd64"
+              name = f"{task}:{variant} | {architecture}"
+              # ":" character not valid in GitHub Actions artifact names
+              name_in_artifact = f"{task}-{variant}-{architecture}"
+              jobs.append({
+                  "spread_job": job,
+                  "name": name,
+                  "name_in_artifact": name_in_artifact,
+                  "runner": runner,
+              })
+          output = f"jobs={json.dumps(jobs)}"
+          print(output)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as file:
+              file.write(output)
+    outputs:
+      jobs: ${{ steps.collect-jobs.outputs.jobs }}
+
+  integration-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        job: ${{ fromJSON(needs.collect-integration-tests.outputs.jobs) }}
+    name: ${{ matrix.job.name }}
+    needs:
+      - collect-integration-tests
+    runs-on: ${{ matrix.job.runner }}
+    timeout-minutes: 150
+    steps:
+      - name: Free up disk space
+        timeout-minutes: 10
+        run: |
+          sudo rm -rf \
+            /opt/google \
+            /opt/hostedtoolcache \
+            /opt/microsoft/powershell \
+            /opt/microsoft/msedge \
+            "$AGENT_TOOLSDIRECTORY" \
+            /usr/lib/firefox \
+            /usr/lib/mono \
+            /usr/local/julia* \
+            /usr/local/lib/android \
+            /usr/local/share/chromium \
+            /usr/local/share/powershell \
+            /usr/share/dotnet \
+            /usr/share/gradle* \
+            /usr/share/miniconda \
+            /usr/share/sbt \
+            /usr/share/swift \
+            /home/linuxbrew
+          printf '\nDisk usage\n'
+          df --human-readable
+      - name: Checkout
+        timeout-minutes: 3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up spread
+        timeout-minutes: 5
+        # TODO: replace with `charmcraft test` when
+        # https://github.com/canonical/charmcraft/issues/2105 and
+        # https://github.com/canonical/charmcraft/issues/2130 are fixed
+        run: |
+          sudo snap install go --classic
+          go install github.com/canonical/spread/cmd/spread@latest
+      - name: Download packed rock
+        timeout-minutes: 5
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: ${{ inputs.artifact-prefix }}-*
+          merge-multiple: true
+      - name: Run spread job
+        timeout-minutes: 120
+        id: spread
+        run: ~/go/bin/spread -vv -artifacts=artifacts '${{ matrix.job.spread_job }}'
+      - name: snap list
+        timeout-minutes: 1
+        if: ${{ success() || (failure() && steps.spread.outcome == 'failure') }}
+        run: snap list
+      - name: kubectl get all -A
+        timeout-minutes: 1
+        if: ${{ success() || (failure() && steps.spread.outcome == 'failure') }}
+        run: sudo kubectl get all -A
+      - name: ztunnel logs
+        timeout-minutes: 1
+        if: ${{ success() || (failure() && steps.spread.outcome == 'failure') }}
+        run: sudo kubectl logs -n istio-system -l app=ztunnel
+      - name: Disk usage
+        timeout-minutes: 1
+        if: ${{ success() || (failure() && steps.spread.outcome == 'failure') }}
+        run: df --human-readable
+      - name: Upload logs
+        timeout-minutes: 2
+        if: ${{ success() || (failure() && steps.spread.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: logs-${{ matrix.job.name_in_artifact }}
+          path: ~/logs/

@@ -1,6 +1,8 @@
 #!/bin/bash
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
 
-python3 -m opt.hub.scripts.monitor_sa \
+python3 -m app \
 --app-name=integration-hub \
 --config=${SPARK_PROPERTIES_FILE} \
 --allowlist=${SA_ALLOWLIST} \
