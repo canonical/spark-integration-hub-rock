@@ -59,4 +59,16 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=f"{SPARK8T_HUB_LABEL}-truststore",
     )
+    parser.add_argument(
+        "-m",
+        "--service-mesh-enabled",
+        help="Flag indicating if the service mesh is enabled for Spark workloads.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--client-app-service-accounts",
+        help="The comma-separated list of the primary service accounts for the client applications.",
+        type=str,
+        default="",
+    )
     return parser.parse_args()

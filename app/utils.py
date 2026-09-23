@@ -11,7 +11,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import NamedTuple, cast
+from typing import Literal, NamedTuple, cast
 
 import httpx2
 from lightkube import Client
@@ -145,6 +145,113 @@ def get_integration_hub_secret(
                 "stringData": options if options else {},
             }
         ),
+    )
+
+
+def get_workload_auth_policy(
+    policy_name: str,
+    workload_namespace: str,
+    workload_service_account: str,
+    extra_allowed_principals: list[str],
+    role: Literal["driver", "executor"],
+):
+    """Get the authorization policy for Spark workloads (driver and executors).
+
+    Args:
+        policy_name (str): The name of the authorization policy.
+        workload_namespace (str): The namespace of the workload.
+        workload_service_account (str): The service account of the workload.
+        extra_allowed_principals (list[str]): Additional allowed principals for the workload.
+        role (Literal["driver", "executor"]): The role of the workload (driver or executor).
+
+    Returns:
+        AuthorizationPolicy: The constructed authorization policy.
+    """
+    return AuthorizationPolicy.from_dict(
+        {
+            "apiVersion": "security.istio.io/v1",
+            "kind": "AuthorizationPolicy",
+            "metadata": {
+                "name": policy_name,
+                "namespace": workload_namespace,
+                "labels": {MANAGED_BY_LABEL: MANAGED_BY_INTEGRATION_HUB},
+            },
+            "spec": {
+                "selector": {
+                    "matchLabels": {
+                        "spark-role": role,
+                    },
+                },
+                "action": "ALLOW",
+                "rules": [
+                    {
+                        "from": [
+                            {
+                                "source": {
+                                    "principals": [
+                                        f"cluster.local/ns/{workload_namespace}/sa/{workload_service_account}",
+                                        *extra_allowed_principals,
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
+        }
+    )
+
+
+def get_client_app_auth_policy(
+    policy_name: str,
+    app_namespace: str,
+    app_name: str,
+    workload_namespace: str,
+    workload_service_account: str,
+):
+    """Get the authorization policy for a client application integrated to the hub.
+
+    Args:
+        policy_name (str): The name of the authorization policy.
+        app_namespace (str): The namespace of the client application.
+        app_name (str): The name of the client application.
+        workload_namespace (str): The namespace of the workload.
+        workload_service_account (str): The service account of the workload.
+
+    Returns:
+        AuthorizationPolicy: The constructed authorization policy.
+    """
+    return AuthorizationPolicy.from_dict(
+        {
+            "apiVersion": "security.istio.io/v1",
+            "kind": "AuthorizationPolicy",
+            "metadata": {
+                "name": policy_name,
+                "namespace": app_namespace,
+                "labels": {MANAGED_BY_LABEL: MANAGED_BY_INTEGRATION_HUB},
+            },
+            "spec": {
+                "selector": {
+                    "matchLabels": {
+                        "app.kubernetes.io/name": app_name,
+                    },
+                },
+                "action": "ALLOW",
+                "rules": [
+                    {
+                        "from": [
+                            {
+                                "source": {
+                                    "principals": [
+                                        f"cluster.local/ns/{workload_namespace}/sa/{workload_service_account}"
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
+        }
     )
 
 

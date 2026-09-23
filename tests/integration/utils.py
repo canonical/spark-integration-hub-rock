@@ -55,6 +55,32 @@ def delete_hub_setup() -> None:
     logger.info("Deleted integration-hub setup")
 
 
+def enable_service_mesh(client_app_service_accounts: str = "") -> None:
+    """Enable service mesh for the integration hub deployment, optionally specifying client app service accounts."""
+    logger.info(
+        f"Enabling service mesh, client app service accounts: {client_app_service_accounts}..."
+    )
+    run_command(
+        f"kubectl -n {HUB_NAMESPACE} set env deployment/{HUB_DEPLOYMENT_NAME} SERVICE_MESH_ENABLED=true CLIENT_APP_SERVICE_ACCOUNTS={client_app_service_accounts}"
+    )
+    logger.info("Service mesh enabled, performing rollout...")
+    run_command(
+        f"kubectl -n {HUB_NAMESPACE} rollout status deployment/{HUB_DEPLOYMENT_NAME} --timeout=180s"
+    )
+
+
+def disable_service_mesh() -> None:
+    """Disable service mesh for the integration hub deployment."""
+    logger.info("Disabling service mesh...")
+    run_command(
+        f"kubectl -n {HUB_NAMESPACE} set env deployment/{HUB_DEPLOYMENT_NAME} SERVICE_MESH_ENABLED-"
+    )
+    logger.info("Service mesh disabled, performing rollout...")
+    run_command(
+        f"kubectl -n {HUB_NAMESPACE} rollout status deployment/{HUB_DEPLOYMENT_NAME} --timeout=180s"
+    )
+
+
 def get_resource(
     client: Client, resource: type[NamespacedResource], name: str, namespace: str
 ) -> NamespacedResource | None:

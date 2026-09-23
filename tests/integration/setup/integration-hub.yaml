@@ -99,6 +99,11 @@ spec:
         - name: integration-hub
           image: docker.io/library/spark-integration-hub:test
           imagePullPolicy: Never
+          env:
+            - name: SERVICE_MESH_ENABLED
+              value: ""
+            - name: CLIENT_APP_SERVICE_ACCOUNTS
+              value: ""
           volumeMounts:
             - name: allowlist
               mountPath: /etc/hub/conf/allowlist

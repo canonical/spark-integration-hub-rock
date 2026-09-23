@@ -11,6 +11,8 @@ from utils import (
     TEST_IMAGE_OCI,
     create_service_account,
     delete_service_account,
+    disable_service_mesh,
+    enable_service_mesh,
     get_resource,
     wait_until,
 )
@@ -131,6 +133,132 @@ def test_create_monitored_spark_service_account(client: Client, namespace: str):
         ),
     )
     assert secret is not None, "Integration Hub truststore secret was not created."
+
+
+def test_enable_service_mesh(client: Client, namespace: str):
+    """Test enabling service mesh for the integration hub deployment."""
+    enable_service_mesh(client_app_service_accounts=f"{namespace}:client-sa")
+
+    wait_until(
+        lambda: (
+            get_resource(
+                client,
+                resource=AuthorizationPolicy,
+                name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-driver-policy",
+                namespace=namespace,
+            )
+            is not None
+        ),
+        description="Waiting for the driver authorization policy to be created.",
+    )
+    driver_auth_policy = get_resource(
+        client,
+        resource=AuthorizationPolicy,
+        name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-driver-policy",
+        namespace=namespace,
+    )
+    assert driver_auth_policy is not None, (
+        f"Authorization policy for Spark driver for service account {TEST_SERVICE_ACCOUNT} was not created."
+    )
+    assert driver_auth_policy["spec"]["selector"] == {"matchLabels": {"spark-role": "driver"}}
+    assert driver_auth_policy["spec"]["action"] == "ALLOW"
+    allowed_principals = [
+        p
+        for rule in driver_auth_policy["spec"]["rules"]
+        for f in rule["from"]
+        for p in f["source"]["principals"]
+    ]
+    assert set(allowed_principals) == {
+        f"cluster.local/ns/{namespace}/sa/{TEST_SERVICE_ACCOUNT}",
+        f"cluster.local/ns/{namespace}/sa/client-sa",
+    }
+
+    executor_auth_policy = get_resource(
+        client,
+        resource=AuthorizationPolicy,
+        name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-executor-policy",
+        namespace=namespace,
+    )
+    assert executor_auth_policy is not None, (
+        f"Authorization policy for Spark executor for service account {TEST_SERVICE_ACCOUNT} was not created."
+    )
+    assert executor_auth_policy["spec"]["selector"] == {"matchLabels": {"spark-role": "executor"}}
+    assert executor_auth_policy["spec"]["action"] == "ALLOW"
+    allowed_principals = [
+        p
+        for rule in executor_auth_policy["spec"]["rules"]
+        for f in rule["from"]
+        for p in f["source"]["principals"]
+    ]
+    assert set(allowed_principals) == {f"cluster.local/ns/{namespace}/sa/{TEST_SERVICE_ACCOUNT}"}
+
+    client_app_policy = get_resource(
+        client,
+        resource=AuthorizationPolicy,
+        name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-{namespace}-client-sa-policy",
+        namespace=namespace,
+    )
+    assert client_app_policy is not None, (
+        f"Authorization policy for client app service account {namespace}:client-sa for service account {TEST_SERVICE_ACCOUNT} was not created."
+    )
+    assert client_app_policy["spec"]["selector"] == {
+        "matchLabels": {"app.kubernetes.io/name": "client-sa"}
+    }
+    assert client_app_policy["spec"]["action"] == "ALLOW"
+    allowed_principals = [
+        p
+        for rule in client_app_policy["spec"]["rules"]
+        for f in rule["from"]
+        for p in f["source"]["principals"]
+    ]
+    assert set(allowed_principals) == {f"cluster.local/ns/{namespace}/sa/{TEST_SERVICE_ACCOUNT}"}
+
+
+def test_disable_service_mesh(client: Client, namespace: str):
+    """Test disabling service mesh for the integration hub deployment."""
+    disable_service_mesh()
+
+    wait_until(
+        lambda: (
+            get_resource(
+                client,
+                resource=AuthorizationPolicy,
+                name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-driver-policy",
+                namespace=namespace,
+            )
+            is None
+        ),
+        timeout=60,
+        interval=3,
+        description=f"Waiting for Spark driver authorization policy for service account {TEST_SERVICE_ACCOUNT} to be deleted",
+    )
+    driver_auth_policy = get_resource(
+        client,
+        resource=AuthorizationPolicy,
+        name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-driver-policy",
+        namespace=namespace,
+    )
+    assert driver_auth_policy is None, (
+        f"Authorization policy for Spark driver for service account {TEST_SERVICE_ACCOUNT} was not deleted."
+    )
+    executor_auth_policy = get_resource(
+        client,
+        resource=AuthorizationPolicy,
+        name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-executor-policy",
+        namespace=namespace,
+    )
+    assert executor_auth_policy is None, (
+        f"Authorization policy for Spark executor for service account {TEST_SERVICE_ACCOUNT} was not deleted."
+    )
+    client_app_policy = get_resource(
+        client,
+        resource=AuthorizationPolicy,
+        name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-client-ns-client-sa-policy",
+        namespace=namespace,
+    )
+    assert client_app_policy is None, (
+        f"Authorization policy for client app service account client-ns:client-sa for service account {TEST_SERVICE_ACCOUNT} was not deleted."
+    )
 
 
 def test_delete_monitored_service_account(client: Client, namespace: str):

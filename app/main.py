@@ -40,6 +40,9 @@ def main() -> None:
         K8sSecretKeySerializer().serialize(key): value
         for key, value in read_configuration_file(args.config).items()
     }
+    client_app_service_accounts = [
+        sa.strip() for sa in args.client_app_service_accounts.split(",") if sa.strip()
+    ]
     truststore_path = Path(args.truststore) if args.truststore else None
 
     for operation, sa in client.watch(
@@ -63,6 +66,8 @@ def main() -> None:
             spark_properties=spark_properties,
             truststore_path=truststore_path,
             truststore_secret_name=args.truststore_secret_name,
+            service_mesh_enabled=args.service_mesh_enabled,
+            client_app_service_accounts=client_app_service_accounts,
         )
 
 

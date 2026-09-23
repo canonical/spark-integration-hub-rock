@@ -2,6 +2,23 @@
 # See LICENSE file for licensing details.
 
 summary: integration-rock
+prepare: |
+  # Install Istio control plane for service mesh tests
+  curl -L https://istio.io/downloadIstio | sh -
+
+  kubectl -n kube-system patch configmap cilium-config \
+    --type merge \
+    -p '{"data":{"bpf-lb-sock-hostns-only":"true"}}'
+
+  kubectl -n kube-system rollout restart daemonset/cilium
+  kubectl -n kube-system rollout status daemonset/cilium --timeout=90s
+
+  # Dynamically add the downloaded istio-*/bin folder to PATH
+  ISTIO_DIR=$(find $PWD -maxdepth 1 -type d -name "istio-*" | head -n 1)
+  export PATH="$PATH:$ISTIO_DIR/bin"
+
+  # Install Istio with an empty profile and only the base component enabled (we only need CRDs for tests)
+  istioctl install --set profile=empty --skip-confirmation --set components.base.enabled=true
 execute: |
   cd "$SPREAD_PATH"
   tox run -e integration
