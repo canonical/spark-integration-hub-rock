@@ -15,13 +15,13 @@ permissions:
 jobs:
   build:
     name: Build rock
-    uses: canonical/data-platform-workflows/.github/workflows/build_rock.yaml@v50.2.0
+    uses: canonical/data-platform-workflows/.github/workflows/build_rock.yaml@e5539256480675584841600b2f6291c38bc6d4f7 # v50.2.1
 
   release:
     name: Release rock
     needs:
       - build
-    uses: canonical/data-platform-workflows/.github/workflows/release_rock_edge.yaml@v50.2.0
+    uses: canonical/data-platform-workflows/.github/workflows/release_rock_edge.yaml@e5539256480675584841600b2f6291c38bc6d4f7 # v50.2.1
     with:
       artifact-prefix: ${{ needs.build.outputs.artifact-prefix }}
     permissions:
