@@ -13,12 +13,12 @@ from lightkube.resources.core_v1 import Secret, ServiceAccount
 from spark8t.literals import HUB_LABEL
 
 from app.constants import MANAGED_BY_LABEL, MANAGED_BY_SPARK8T
-from app.models import AuthorizationPolicy
 from app.utils import (
     ServiceAccountNames,
     ServiceAccountPatterns,
     create_secret_from_file,
     delete_resource_if_exists,
+    delete_integration_hub_auth_policies,
     get_client_app_auth_policy,
     get_integration_hub_secret,
     get_workload_auth_policy,
@@ -85,11 +85,11 @@ def reconcile(
         == 0
     ):
         delete_resource_if_exists(client, Secret, namespace, truststore_secret_name)
-    delete_resource_if_exists(client, AuthorizationPolicy, namespace, driver_auth_policy_name)
-    delete_resource_if_exists(client, AuthorizationPolicy, namespace, executor_auth_policy_name)
-    for app_ns, app_name in spark_allowed_apps:
-        client_app_auth_policy_name = f"{HUB_LABEL}-{service_account}-{app_ns}-{app_name}-policy"
-        delete_resource_if_exists(client, AuthorizationPolicy, app_ns, client_app_auth_policy_name)
+    # Delete all authorization policies owned by this workload service account by label,
+    # across every namespace. This removes dangling policies even when the service mesh is
+    # disabled or a client application relation has been removed, since it does not rely on
+    # reconstructing policy names from the current client application list.
+    delete_integration_hub_auth_policies(client, namespace, service_account)
 
     if operation != "ADDED":
         logger.info(

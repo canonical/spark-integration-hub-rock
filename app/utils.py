@@ -21,7 +21,12 @@ from lightkube.models.meta_v1 import ObjectMeta
 from lightkube.resources.core_v1 import Secret
 from spark8t.domain import PropertyFile
 
-from app.constants import MANAGED_BY_INTEGRATION_HUB, MANAGED_BY_LABEL
+from app.constants import (
+    MANAGED_BY_INTEGRATION_HUB,
+    MANAGED_BY_LABEL,
+    WORKLOAD_NAMESPACE_LABEL,
+    WORKLOAD_SERVICE_ACCOUNT_LABEL,
+)
 from app.models import AuthorizationPolicy
 
 logger = logging.getLogger(__name__)
@@ -148,6 +153,25 @@ def get_integration_hub_secret(
     )
 
 
+def workload_policy_labels(
+    workload_namespace: str, workload_service_account: str
+) -> dict[str, str]:
+    """Build the labels that mark an authorization policy as owned by a workload service account.
+
+    Args:
+        workload_namespace (str): The namespace of the workload.
+        workload_service_account (str): The service account of the workload.
+
+    Returns:
+        dict[str, str]: The labels identifying the owning workload service account.
+    """
+    return {
+        MANAGED_BY_LABEL: MANAGED_BY_INTEGRATION_HUB,
+        WORKLOAD_NAMESPACE_LABEL: workload_namespace,
+        WORKLOAD_SERVICE_ACCOUNT_LABEL: workload_service_account,
+    }
+
+
 def get_workload_auth_policy(
     policy_name: str,
     workload_namespace: str,
@@ -174,7 +198,7 @@ def get_workload_auth_policy(
             "metadata": {
                 "name": policy_name,
                 "namespace": workload_namespace,
-                "labels": {MANAGED_BY_LABEL: MANAGED_BY_INTEGRATION_HUB},
+                "labels": workload_policy_labels(workload_namespace, workload_service_account),
             },
             "spec": {
                 "selector": {
@@ -228,7 +252,7 @@ def get_client_app_auth_policy(
             "metadata": {
                 "name": policy_name,
                 "namespace": app_namespace,
-                "labels": {MANAGED_BY_LABEL: MANAGED_BY_INTEGRATION_HUB},
+                "labels": workload_policy_labels(workload_namespace, workload_service_account),
             },
             "spec": {
                 "selector": {
@@ -279,3 +303,30 @@ def delete_resource_if_exists(
         logger.info(
             f"Api error while deleting {resource_type} named {resource_name} in namespace {namespace}: {e}"
         )
+
+
+def delete_integration_hub_auth_policies(
+    client: Client,
+    workload_namespace: str,
+    workload_service_account: str,
+):
+    """Delete all authorization policies owned by a workload service account.
+
+    Policies are matched by label across all namespaces, so dangling policies are removed
+    even when the service mesh is disabled or a client application relation has been removed.
+
+    Args:
+        client (Client): The Lightkube client instance.
+        workload_namespace (str): The namespace of the workload.
+        workload_service_account (str): The service account of the workload.
+    """
+    labels = workload_policy_labels(workload_namespace, workload_service_account)
+    try:
+        policies = list(client.list(AuthorizationPolicy, namespace="*", labels=labels))
+    except (ApiError, httpx2.HTTPStatusError) as e:
+        logger.info(f"Api error while listing authorization policies with labels {labels}: {e}")
+        return
+    for policy in policies:
+        name = cast(str, getattr(policy.metadata, "name"))
+        namespace = cast(str, getattr(policy.metadata, "namespace"))
+        delete_resource_if_exists(client, AuthorizationPolicy, namespace, name)
