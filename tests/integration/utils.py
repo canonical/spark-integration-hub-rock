@@ -10,6 +10,13 @@ from typing import Callable, TypeVar
 from lightkube import ApiError, Client
 from lightkube.core.resource import NamespacedResource
 
+from app.constants import (
+    MANAGED_BY_INTEGRATION_HUB,
+    MANAGED_BY_LABEL,
+    WORKLOAD_NAMESPACE_LABEL,
+    WORKLOAD_SERVICE_ACCOUNT_LABEL,
+)
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -91,6 +98,19 @@ def get_resource(
         if e.status.code == 404:
             return None
         raise
+
+
+def assert_workload_labels(policy, namespace: str, service_account: str) -> None:
+    """Assert the policy carries the integration-hub workload ownership labels."""
+    expected = {
+        MANAGED_BY_LABEL: MANAGED_BY_INTEGRATION_HUB,
+        WORKLOAD_NAMESPACE_LABEL: namespace,
+        WORKLOAD_SERVICE_ACCOUNT_LABEL: service_account,
+    }
+    labels = policy.metadata.labels or {}
+    assert expected.items() <= labels.items(), (
+        f"Policy {policy.metadata.name} is missing workload ownership labels; got {labels}."
+    )
 
 
 def create_service_account(username: str, namespace: str = HUB_NAMESPACE) -> str:
