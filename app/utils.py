@@ -11,7 +11,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Literal, NamedTuple, cast
+from typing import Any, Literal, NamedTuple, cast
 
 import httpx2
 from lightkube import Client
@@ -320,7 +320,7 @@ def delete_integration_hub_auth_policies(
         workload_namespace (str): The namespace of the workload.
         workload_service_account (str): The service account of the workload.
     """
-    labels = workload_policy_labels(workload_namespace, workload_service_account)
+    labels: dict[str, Any] = workload_policy_labels(workload_namespace, workload_service_account)
     try:
         policies = list(client.list(AuthorizationPolicy, namespace="*", labels=labels))
     except (ApiError, httpx2.HTTPStatusError) as e:
