@@ -14,3 +14,8 @@ MANAGED_BY_INTEGRATION_HUB = "integration-hub"
 # client application list or whether the service mesh is enabled.
 WORKLOAD_NAMESPACE_LABEL = "integration-hub/workload-namespace"
 WORKLOAD_SERVICE_ACCOUNT_LABEL = "integration-hub/workload-service-account"
+
+# Labels used to identify the client application a per-relation authorization policy
+# belongs to, so a single relation's policies can be computed and cleaned up precisely.
+CLIENT_APP_NAMESPACE_LABEL = "integration-hub/client-app-namespace"
+CLIENT_APP_SERVICE_ACCOUNT_LABEL = "integration-hub/client-app-service-account"

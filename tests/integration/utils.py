@@ -11,6 +11,8 @@ from lightkube import ApiError, Client
 from lightkube.core.resource import NamespacedResource
 
 from app.constants import (
+    CLIENT_APP_NAMESPACE_LABEL,
+    CLIENT_APP_SERVICE_ACCOUNT_LABEL,
     MANAGED_BY_INTEGRATION_HUB,
     MANAGED_BY_LABEL,
     WORKLOAD_NAMESPACE_LABEL,
@@ -88,6 +90,15 @@ def disable_service_mesh() -> None:
     )
 
 
+def restart_hub_watcher(namespace: str = HUB_NAMESPACE) -> None:
+    """Restart the watcher deployment to force a fresh reconcile of existing service accounts."""
+    logger.info("Restarting integration-hub watcher to force a reconcile...")
+    run_command(f"kubectl -n {namespace} rollout restart deployment/{HUB_DEPLOYMENT_NAME}")
+    run_command(
+        f"kubectl -n {namespace} rollout status deployment/{HUB_DEPLOYMENT_NAME} --timeout=180s"
+    )
+
+
 def get_resource(
     client: Client, resource: type[NamespacedResource], name: str, namespace: str
 ) -> NamespacedResource | None:
@@ -110,6 +121,27 @@ def assert_workload_labels(policy, namespace: str, service_account: str) -> None
     labels = policy.metadata.labels or {}
     assert expected.items() <= labels.items(), (
         f"Policy {policy.metadata.name} is missing workload ownership labels; got {labels}."
+    )
+
+
+def assert_client_app_labels(
+    policy,
+    namespace: str,
+    service_account: str,
+    client_app_namespace: str,
+    client_app_service_account: str,
+) -> None:
+    """Assert the policy carries the workload and client application identity labels."""
+    expected = {
+        MANAGED_BY_LABEL: MANAGED_BY_INTEGRATION_HUB,
+        WORKLOAD_NAMESPACE_LABEL: namespace,
+        WORKLOAD_SERVICE_ACCOUNT_LABEL: service_account,
+        CLIENT_APP_NAMESPACE_LABEL: client_app_namespace,
+        CLIENT_APP_SERVICE_ACCOUNT_LABEL: client_app_service_account,
+    }
+    labels = policy.metadata.labels or {}
+    assert expected.items() <= labels.items(), (
+        f"Policy {policy.metadata.name} is missing client application labels; got {labels}."
     )
 
 
