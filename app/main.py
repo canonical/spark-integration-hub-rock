@@ -6,6 +6,7 @@
 
 import logging
 import sys
+import time
 from pathlib import Path
 from typing import cast
 
@@ -18,6 +19,7 @@ from app.constants import MANAGED_BY_LABEL, MANAGED_BY_SPARK8T
 from app.reconciler import reconcile
 from app.utils import (
     build_patterns,
+    garbage_collect_orphaned_resources,
     get_allowlist,
     read_configuration_file,
 )
@@ -45,6 +47,13 @@ def main() -> None:
     ]
     truststore_path = Path(args.truststore) if args.truststore else None
 
+    # One synchronous sweep at startup cleans up policies whose workload service account was
+    # deleted while this watcher was not running. lightkube's watch never returns (it
+    # reconnects internally), so also re-run the sweep from inside the loop at most once per
+    # `args.timeout`, letting missed-DELETE orphans self-heal without a background thread.
+    garbage_collect_orphaned_resources(client)
+    last_garbage_collection = time.monotonic()
+
     for operation, sa in client.watch(
         ServiceAccount,
         namespace="*",
@@ -54,6 +63,11 @@ def main() -> None:
         # https://github.com/canonical/spark-k8s-bundle/issues/72
         server_timeout=args.timeout,
     ):
+        now = time.monotonic()
+        if now - last_garbage_collection >= args.timeout:
+            garbage_collect_orphaned_resources(client)
+            last_garbage_collection = now
+
         service_account = cast(str, getattr(sa.metadata, "name"))
         namespace = cast(str, getattr(sa.metadata, "namespace"))
 
