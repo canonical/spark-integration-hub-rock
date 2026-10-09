@@ -18,7 +18,7 @@ from lightkube import Client
 from lightkube.core.resource import NamespacedResource
 from lightkube.exceptions import ApiError
 from lightkube.models.meta_v1 import ObjectMeta
-from lightkube.resources.core_v1 import Secret
+from lightkube.resources.core_v1 import Secret, ServiceAccount
 from spark8t.domain import PropertyFile
 
 from app.constants import (
@@ -139,6 +139,13 @@ def get_integration_hub_secret(
     Returns:
         Secret: The constructed Kubernetes Secret object.
     """
+    # Use `data` (base64) rather than `stringData` so server-side apply owns and prunes
+    # individual keys; `stringData` is write-only and its derived `data` keys are never
+    # pruned by apply, leaving stale properties behind when the desired set shrinks.
+    data = {
+        key: base64.b64encode(value.encode("utf-8")).decode("utf-8")
+        for key, value in (options or {}).items()
+    }
     return cast(
         Secret,
         Secret.from_dict(
@@ -150,7 +157,7 @@ def get_integration_hub_secret(
                     "namespace": namespace,
                     "labels": workload_owner_labels(namespace, service_account),
                 },
-                "stringData": options if options else {},
+                "data": data,
             }
         ),
     )
@@ -440,4 +447,75 @@ def delete_integration_hub_auth_policies(
         namespace = cast(str, getattr(policy.metadata, "namespace"))
         if (namespace, name) in keep:
             continue
+        delete_resource_if_exists(client, AuthorizationPolicy, namespace, name)
+
+
+def service_account_exists(client: Client, namespace: str, name: str) -> bool:
+    """Return whether the named service account still exists.
+
+    Unknown API errors are treated as "exists" so that transient failures never cause a
+    valid policy to be garbage-collected.
+    """
+    try:
+        client.get(ServiceAccount, name=name, namespace=namespace)
+        return True
+    except ApiError as e:
+        if e.status.code == 404:
+            return False
+        logger.info(f"Api error while checking service account {namespace}:{name}: {e}")
+        return True
+    except httpx2.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            return False
+        logger.info(f"Api error while checking service account {namespace}:{name}: {e}")
+        return True
+
+
+def garbage_collect_orphaned_auth_policies(client: Client) -> None:
+    """Delete integration hub authorization policies whose workload service account is gone.
+
+    The per-service-account reconcile only cleans up policies for service accounts it
+    currently observes via the watch. If a service account is deleted while its DELETE event
+    is missed (e.g. during the periodic watcher restart), its policies would leak because no
+    later reconcile revisits a service account that no longer exists. This pass reconciles
+    from actual cluster state: any managed policy whose owning workload service account (read
+    from its labels) no longer exists is removed.
+
+    Args:
+        client (Client): The Lightkube client instance.
+    """
+    try:
+        policies = list(
+            client.list(
+                AuthorizationPolicy,
+                namespace="*",
+                labels={MANAGED_BY_LABEL: MANAGED_BY_INTEGRATION_HUB},
+            )
+        )
+    except (ApiError, httpx2.HTTPStatusError) as e:
+        logger.info(f"Api error while listing integration hub authorization policies: {e}")
+        return
+
+    # Cache existence lookups so we issue at most one GET per workload service account.
+    existence: dict[tuple[str, str], bool] = {}
+    for policy in policies:
+        labels = getattr(policy.metadata, "labels", None) or {}
+        workload_namespace = labels.get(WORKLOAD_NAMESPACE_LABEL)
+        workload_service_account = labels.get(WORKLOAD_SERVICE_ACCOUNT_LABEL)
+        if not workload_namespace or not workload_service_account:
+            # Cannot resolve an owning service account; leave the policy untouched.
+            continue
+        key = (workload_namespace, workload_service_account)
+        if key not in existence:
+            existence[key] = service_account_exists(
+                client, workload_namespace, workload_service_account
+            )
+        if existence[key]:
+            continue
+        name = cast(str, getattr(policy.metadata, "name"))
+        namespace = cast(str, getattr(policy.metadata, "namespace"))
+        logger.info(
+            f"Garbage-collecting orphaned authorization policy {name} in namespace {namespace}: "
+            f"workload service account {workload_namespace}:{workload_service_account} no longer exists"
+        )
         delete_resource_if_exists(client, AuthorizationPolicy, namespace, name)

@@ -18,6 +18,7 @@ from app.constants import MANAGED_BY_LABEL, MANAGED_BY_SPARK8T
 from app.reconciler import reconcile
 from app.utils import (
     build_patterns,
+    garbage_collect_orphaned_auth_policies,
     get_allowlist,
     read_configuration_file,
 )
@@ -44,6 +45,11 @@ def main() -> None:
         sa.strip() for sa in args.client_app_service_accounts.split(",") if sa.strip()
     ]
     truststore_path = Path(args.truststore) if args.truststore else None
+
+    # Reconcile from actual cluster state before watching, so authorization policies whose
+    # workload service account was deleted while its event was missed (e.g. across the
+    # periodic watcher restart) are cleaned up rather than leaking.
+    garbage_collect_orphaned_auth_policies(client)
 
     for operation, sa in client.watch(
         ServiceAccount,
