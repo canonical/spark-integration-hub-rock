@@ -126,11 +126,7 @@ def get_allowlist(file_path: Path) -> list[str]:
 
 
 def get_integration_hub_secret(
-    secret_name: str,
-    namespace: str,
-    service_account: str,
-    options: dict[str, str],
-    service_account_uid: str | None = None,
+    secret_name: str, namespace: str, service_account: str, options: dict[str, str]
 ) -> Secret:
     """Get the integration hub secret as a Kubernetes Secret object.
 
@@ -139,9 +135,6 @@ def get_integration_hub_secret(
         namespace (str): The namespace of the secret.
         service_account (str): The workload service account the secret belongs to.
         options (dict[str, str]): The key-value pairs to include in the secret.
-        service_account_uid (str | None): UID of the workload service account; when provided,
-            an owner reference ties the secret's lifecycle to the service account so the
-            cluster garbage collector deletes it when the account is removed.
 
     Returns:
         Secret: The constructed Kubernetes Secret object.
@@ -153,22 +146,17 @@ def get_integration_hub_secret(
         key: base64.b64encode(value.encode("utf-8")).decode("utf-8")
         for key, value in (options or {}).items()
     }
-    metadata: dict[str, Any] = {
-        "name": secret_name,
-        "namespace": namespace,
-        "labels": workload_owner_labels(namespace, service_account),
-    }
-    if service_account_uid:
-        metadata["ownerReferences"] = [
-            service_account_owner_reference(service_account, service_account_uid)
-        ]
     return cast(
         Secret,
         Secret.from_dict(
             {
                 "apiVersion": "v1",
                 "kind": "Secret",
-                "metadata": metadata,
+                "metadata": {
+                    "name": secret_name,
+                    "namespace": namespace,
+                    "labels": workload_owner_labels(namespace, service_account),
+                },
                 "data": data,
             }
         ),
@@ -222,34 +210,11 @@ def client_app_policy_labels(
     }
 
 
-def service_account_owner_reference(service_account: str, uid: str) -> dict[str, str]:
-    """Build an owner reference tying a resource's lifecycle to a workload service account.
-
-    When the service account is deleted, the Kubernetes garbage collector cascades the
-    deletion to resources carrying this reference. Only valid for resources in the **same**
-    namespace as the service account; Kubernetes forbids cross-namespace owner references.
-
-    Args:
-        service_account (str): The name of the owning service account.
-        uid (str): The UID of the owning service account.
-
-    Returns:
-        dict[str, str]: An ownerReferences entry for the service account.
-    """
-    return {
-        "apiVersion": "v1",
-        "kind": "ServiceAccount",
-        "name": service_account,
-        "uid": uid,
-    }
-
-
 def get_workload_auth_policy(
     policy_name: str,
     workload_namespace: str,
     workload_service_account: str,
     role: Literal["driver", "executor"],
-    workload_service_account_uid: str | None = None,
 ):
     """Get the base authorization policy for Spark workloads (driver and executors).
 
@@ -262,27 +227,19 @@ def get_workload_auth_policy(
         workload_namespace (str): The namespace of the workload.
         workload_service_account (str): The service account of the workload.
         role (Literal["driver", "executor"]): The role of the workload (driver or executor).
-        workload_service_account_uid (str | None): UID of the workload service account; when
-            given, the policy is owned by it so the cluster garbage-collects the policy when
-            the service account is deleted (valid because this policy is in the workload namespace).
 
     Returns:
         AuthorizationPolicy: The constructed authorization policy.
     """
-    metadata: dict[str, Any] = {
-        "name": policy_name,
-        "namespace": workload_namespace,
-        "labels": workload_owner_labels(workload_namespace, workload_service_account),
-    }
-    if workload_service_account_uid:
-        metadata["ownerReferences"] = [
-            service_account_owner_reference(workload_service_account, workload_service_account_uid)
-        ]
     return AuthorizationPolicy.from_dict(
         {
             "apiVersion": "security.istio.io/v1",
             "kind": "AuthorizationPolicy",
-            "metadata": metadata,
+            "metadata": {
+                "name": policy_name,
+                "namespace": workload_namespace,
+                "labels": workload_owner_labels(workload_namespace, workload_service_account),
+            },
             "spec": {
                 "selector": {
                     "matchLabels": {
@@ -375,7 +332,6 @@ def get_client_app_to_driver_auth_policy(
     workload_service_account: str,
     client_app_namespace: str,
     client_app_service_account: str,
-    workload_service_account_uid: str | None = None,
 ):
     """Get the policy that lets a client application reach the workload driver.
 
@@ -389,32 +345,24 @@ def get_client_app_to_driver_auth_policy(
         workload_service_account (str): The service account of the workload.
         client_app_namespace (str): The namespace of the client application.
         client_app_service_account (str): The service account of the client application.
-        workload_service_account_uid (str | None): UID of the workload service account; when
-            given, the policy is owned by it so the cluster garbage-collects the policy when
-            the service account is deleted (valid because this policy is in the workload namespace).
 
     Returns:
         AuthorizationPolicy: The constructed authorization policy.
     """
-    metadata: dict[str, Any] = {
-        "name": policy_name,
-        "namespace": workload_namespace,
-        "labels": client_app_policy_labels(
-            workload_namespace,
-            workload_service_account,
-            client_app_namespace,
-            client_app_service_account,
-        ),
-    }
-    if workload_service_account_uid:
-        metadata["ownerReferences"] = [
-            service_account_owner_reference(workload_service_account, workload_service_account_uid)
-        ]
     return AuthorizationPolicy.from_dict(
         {
             "apiVersion": "security.istio.io/v1",
             "kind": "AuthorizationPolicy",
-            "metadata": metadata,
+            "metadata": {
+                "name": policy_name,
+                "namespace": workload_namespace,
+                "labels": client_app_policy_labels(
+                    workload_namespace,
+                    workload_service_account,
+                    client_app_namespace,
+                    client_app_service_account,
+                ),
+            },
             "spec": {
                 "selector": {
                     "matchLabels": {
@@ -523,39 +471,39 @@ def service_account_exists(client: Client, namespace: str, name: str) -> bool:
         return True
 
 
-def garbage_collect_orphaned_auth_policies(client: Client) -> None:
-    """Delete integration hub authorization policies whose workload service account is gone.
+def _garbage_collect_orphaned_resources(
+    client: Client,
+    resource_type: type[NamespacedResource],
+    existence: dict[tuple[str, str], bool],
+) -> None:
+    """Delete integration hub resources of ``resource_type`` whose workload SA is gone.
 
-    The per-service-account reconcile only cleans up policies for service accounts it
-    currently observes via the watch. If a service account is deleted while its DELETE event
-    is missed (e.g. during the periodic watcher restart), its policies would leak because no
-    later reconcile revisits a service account that no longer exists. This pass reconciles
-    from actual cluster state: any managed policy whose owning workload service account (read
-    from its labels) no longer exists is removed.
-
-    Args:
-        client (Client): The Lightkube client instance.
+    Resources are matched by the ``managed-by`` label and must carry the workload-namespace
+    and workload-service-account labels; those without an owning workload service account
+    (e.g. the shared truststore secret) are left untouched. ``existence`` caches service
+    account lookups so each account is checked at most once across resource types.
     """
     try:
-        policies = list(
+        resources = list(
             client.list(
-                AuthorizationPolicy,
+                resource_type,
                 namespace="*",
                 labels={MANAGED_BY_LABEL: MANAGED_BY_INTEGRATION_HUB},
             )
         )
     except (ApiError, httpx2.HTTPStatusError) as e:
-        logger.info(f"Api error while listing integration hub authorization policies: {e}")
+        logger.info(
+            f"Api error while listing {resource_type.__name__} for garbage collection: {e}"
+        )
         return
 
-    # Cache existence lookups so we issue at most one GET per workload service account.
-    existence: dict[tuple[str, str], bool] = {}
-    for policy in policies:
-        labels = getattr(policy.metadata, "labels", None) or {}
+    for resource in resources:
+        metadata = getattr(resource, "metadata", None)
+        labels = getattr(metadata, "labels", None) or {}
         workload_namespace = labels.get(WORKLOAD_NAMESPACE_LABEL)
         workload_service_account = labels.get(WORKLOAD_SERVICE_ACCOUNT_LABEL)
         if not workload_namespace or not workload_service_account:
-            # Cannot resolve an owning service account; leave the policy untouched.
+            # No owning workload service account (e.g. the shared truststore secret); skip.
             continue
         key = (workload_namespace, workload_service_account)
         if key not in existence:
@@ -564,10 +512,31 @@ def garbage_collect_orphaned_auth_policies(client: Client) -> None:
             )
         if existence[key]:
             continue
-        name = cast(str, getattr(policy.metadata, "name"))
-        namespace = cast(str, getattr(policy.metadata, "namespace"))
+        name = cast(str, getattr(metadata, "name"))
+        namespace = cast(str, getattr(metadata, "namespace"))
         logger.info(
-            f"Garbage-collecting orphaned authorization policy {name} in namespace {namespace}: "
-            f"workload service account {workload_namespace}:{workload_service_account} no longer exists"
+            f"Garbage-collecting orphaned {resource_type.__name__} {name} in namespace "
+            f"{namespace}: workload service account "
+            f"{workload_namespace}:{workload_service_account} no longer exists"
         )
-        delete_resource_if_exists(client, AuthorizationPolicy, namespace, name)
+        delete_resource_if_exists(client, resource_type, namespace, name)
+
+
+def garbage_collect_orphaned_resources(client: Client) -> None:
+    """Delete integration hub policies and config secrets whose workload service account is gone.
+
+    The per-service-account reconcile only cleans up resources for service accounts it
+    currently observes via the watch. If a service account is deleted while its DELETE event
+    is missed (e.g. during a watch resync), its authorization policies and config secret would
+    leak because no later reconcile revisits a service account that no longer exists. This pass
+    reconciles from actual cluster state: any managed resource whose owning workload service
+    account (read from its labels) no longer exists is removed. The shared truststore secret is
+    not owned by a single account and is left untouched.
+
+    Args:
+        client (Client): The Lightkube client instance.
+    """
+    # Share the service-account existence cache so each account is checked at most once.
+    existence: dict[tuple[str, str], bool] = {}
+    _garbage_collect_orphaned_resources(client, AuthorizationPolicy, existence)
+    _garbage_collect_orphaned_resources(client, Secret, existence)
