@@ -62,6 +62,7 @@ def main() -> None:
     ):
         service_account = cast(str, getattr(sa.metadata, "name"))
         namespace = cast(str, getattr(sa.metadata, "namespace"))
+        service_account_uid = cast(str | None, getattr(sa.metadata, "uid", None))
 
         reconcile(
             client=client,
@@ -74,6 +75,7 @@ def main() -> None:
             truststore_secret_name=args.truststore_secret_name,
             service_mesh_enabled=args.service_mesh_enabled,
             client_app_service_accounts=client_app_service_accounts,
+            service_account_uid=service_account_uid,
         )
 
 

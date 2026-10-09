@@ -46,6 +46,7 @@ def reconcile(
     truststore_secret_name: str,
     service_mesh_enabled: bool,
     client_app_service_accounts: list[str],
+    service_account_uid: str | None = None,
 ):
     """Reconcile service-account changes."""
     logger.info(f"Operation: {operation}")
@@ -75,6 +76,7 @@ def reconcile(
             namespace=namespace,
             service_account=service_account,
             options=spark_properties,
+            service_account_uid=service_account_uid,
         )
         client.apply(integration_hub_secret, force=True)
 
@@ -92,12 +94,14 @@ def reconcile(
                 workload_namespace=namespace,
                 workload_service_account=service_account,
                 role="driver",
+                workload_service_account_uid=service_account_uid,
             )
             executor_auth_policy = get_workload_auth_policy(
                 policy_name=executor_auth_policy_name,
                 workload_namespace=namespace,
                 workload_service_account=service_account,
                 role="executor",
+                workload_service_account_uid=service_account_uid,
             )
             desired_policies = [driver_auth_policy, executor_auth_policy]
             # One pair of policies per (workload, client application) relation: the driver may
@@ -119,6 +123,7 @@ def reconcile(
                         workload_service_account=service_account,
                         client_app_namespace=app_ns,
                         client_app_service_account=app_name,
+                        workload_service_account_uid=service_account_uid,
                     )
                 )
             for policy in desired_policies:
@@ -128,6 +133,8 @@ def reconcile(
             f"Operation: {operation}; removing resources for service account: "
             f"{namespace}:{service_account}"
         )
+        # Ideally, the secret should have been removed by K8s since its owner got deleted
+        # but we explicitly delete it here to ensure cleanup, just in case.
         delete_resource_if_exists(client, Secret, namespace, hub_secret_name)
 
     # Remove the truststore secret only when it is no longer needed: the truststore is gone
