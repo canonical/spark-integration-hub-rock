@@ -196,55 +196,29 @@ def test_enable_service_mesh(client: Client, namespace: str):
     assert set(allowed_principals) == {f"cluster.local/ns/{namespace}/sa/{TEST_SERVICE_ACCOUNT}"}
     assert_workload_labels(executor_auth_policy, namespace, TEST_SERVICE_ACCOUNT)
 
-    client_app_policy = get_resource(
+    # A dedicated per-relation policy in the workload namespace lets the client application reach
+    # the Spark driver, instead of merging client principals into the base driver policy.
+    client_app_auth_policy = get_resource(
         client,
         resource=AuthorizationPolicy,
         name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-{namespace}-client-sa-policy",
         namespace=namespace,
     )
-    assert client_app_policy is not None, (
-        f"Authorization policy for client app service account {namespace}:client-sa for service account {TEST_SERVICE_ACCOUNT} was not created."
-    )
-    assert client_app_policy["spec"]["selector"] == {
-        "matchLabels": {"app.kubernetes.io/name": "client-sa"}
-    }
-    assert client_app_policy["spec"]["action"] == "ALLOW"
-    allowed_principals = [
-        p
-        for rule in client_app_policy["spec"]["rules"]
-        for f in rule["from"]
-        for p in f["source"]["principals"]
-    ]
-    assert set(allowed_principals) == {f"cluster.local/ns/{namespace}/sa/{TEST_SERVICE_ACCOUNT}"}
-    assert_client_app_labels(
-        client_app_policy, namespace, TEST_SERVICE_ACCOUNT, namespace, "client-sa"
-    )
-
-    # The reverse direction: a dedicated per-relation policy lets the client application reach
-    # the Spark driver, instead of merging client principals into the base driver policy.
-    client_app_to_driver_policy = get_resource(
-        client,
-        resource=AuthorizationPolicy,
-        name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-{namespace}-client-sa-to-driver-policy",
-        namespace=namespace,
-    )
-    assert client_app_to_driver_policy is not None, (
+    assert client_app_auth_policy is not None, (
         f"Authorization policy letting client app {namespace}:client-sa reach the driver for "
         f"service account {TEST_SERVICE_ACCOUNT} was not created."
     )
-    assert client_app_to_driver_policy["spec"]["selector"] == {
-        "matchLabels": {"spark-role": "driver"}
-    }
-    assert client_app_to_driver_policy["spec"]["action"] == "ALLOW"
+    assert client_app_auth_policy["spec"]["selector"] == {"matchLabels": {"spark-role": "driver"}}
+    assert client_app_auth_policy["spec"]["action"] == "ALLOW"
     allowed_principals = [
         p
-        for rule in client_app_to_driver_policy["spec"]["rules"]
+        for rule in client_app_auth_policy["spec"]["rules"]
         for f in rule["from"]
         for p in f["source"]["principals"]
     ]
     assert set(allowed_principals) == {f"cluster.local/ns/{namespace}/sa/client-sa"}
     assert_client_app_labels(
-        client_app_to_driver_policy, namespace, TEST_SERVICE_ACCOUNT, namespace, "client-sa"
+        client_app_auth_policy, namespace, TEST_SERVICE_ACCOUNT, namespace, "client-sa"
     )
 
 
@@ -260,7 +234,6 @@ def test_authorization_policies_not_recreated_on_reconcile(client: Client, names
         f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-driver-policy",
         f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-executor-policy",
         f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-{namespace}-client-sa-policy",
-        f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-{namespace}-client-sa-to-driver-policy",
     ]
 
     identities_before = {}
@@ -326,42 +299,24 @@ def test_remove_client_application_relation(client: Client, namespace: str):
         description="Waiting for the removed client application authorization policy to be deleted.",
     )
 
-    removed_policy = get_resource(
+    removed_client_app_policy = get_resource(
         client,
         resource=AuthorizationPolicy,
         name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-{namespace}-client-sa-2-policy",
         namespace=namespace,
     )
-    assert removed_policy is None, (
+    assert removed_client_app_policy is None, (
         "Authorization policy for the removed client application client-sa-2 was not deleted."
     )
-    removed_to_driver_policy = get_resource(
-        client,
-        resource=AuthorizationPolicy,
-        name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-{namespace}-client-sa-2-to-driver-policy",
-        namespace=namespace,
-    )
-    assert removed_to_driver_policy is None, (
-        "The client-app-to-driver policy for the removed client application client-sa-2 was not deleted."
-    )
 
-    retained_policy = get_resource(
+    retained_client_app_policy = get_resource(
         client,
         resource=AuthorizationPolicy,
         name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-{namespace}-client-sa-policy",
         namespace=namespace,
     )
-    assert retained_policy is not None, (
-        "Authorization policy for the retained client application client-sa was unexpectedly deleted."
-    )
-    retained_to_driver_policy = get_resource(
-        client,
-        resource=AuthorizationPolicy,
-        name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-{namespace}-client-sa-to-driver-policy",
-        namespace=namespace,
-    )
-    assert retained_to_driver_policy is not None, (
-        "The client-app-to-driver policy for the retained client application client-sa was "
+    assert retained_client_app_policy is not None, (
+        "Authorization policy for the retained client application client-sa was "
         "unexpectedly deleted."
     )
 
@@ -414,23 +369,14 @@ def test_disable_service_mesh(client: Client, namespace: str):
     assert executor_auth_policy is None, (
         f"Authorization policy for Spark executor for service account {TEST_SERVICE_ACCOUNT} was not deleted."
     )
-    client_app_policy = get_resource(
+    client_app_auth_policy = get_resource(
         client,
         resource=AuthorizationPolicy,
         name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-{namespace}-client-sa-policy",
         namespace=namespace,
     )
-    assert client_app_policy is None, (
-        f"Authorization policy for client app service account {namespace}:client-sa for service account {TEST_SERVICE_ACCOUNT} was not deleted."
-    )
-    client_app_to_driver_policy = get_resource(
-        client,
-        resource=AuthorizationPolicy,
-        name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-{namespace}-client-sa-to-driver-policy",
-        namespace=namespace,
-    )
-    assert client_app_to_driver_policy is None, (
-        f"Client-app-to-driver policy for {namespace}:client-sa for service account "
+    assert client_app_auth_policy is None, (
+        f"Authorization policy for client app service account {namespace}:client-sa for service account "
         f"{TEST_SERVICE_ACCOUNT} was not deleted."
     )
 
