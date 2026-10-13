@@ -381,9 +381,67 @@ def test_disable_service_mesh(client: Client, namespace: str):
     )
 
 
+def test_reenable_service_mesh(client: Client, namespace: str):
+    """Test enabling service mesh for the integration hub deployment."""
+    enable_service_mesh(client_app_service_accounts=f"{namespace}:client-sa")
+
+    wait_until(
+        lambda: (
+            get_resource(
+                client,
+                resource=AuthorizationPolicy,
+                name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-driver-policy",
+                namespace=namespace,
+            )
+            is not None
+        ),
+        description="Waiting for the driver authorization policy to be created.",
+    )
+    driver_auth_policy = get_resource(
+        client,
+        resource=AuthorizationPolicy,
+        name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-driver-policy",
+        namespace=namespace,
+    )
+    assert driver_auth_policy is not None, (
+        f"Authorization policy for Spark driver for service account {TEST_SERVICE_ACCOUNT} was not created."
+    )
+    executor_auth_policy = get_resource(
+        client,
+        resource=AuthorizationPolicy,
+        name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-executor-policy",
+        namespace=namespace,
+    )
+    assert executor_auth_policy is not None, (
+        f"Authorization policy for Spark executor for service account {TEST_SERVICE_ACCOUNT} was not created."
+    )
+    client_app_auth_policy = get_resource(
+        client,
+        resource=AuthorizationPolicy,
+        name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-{namespace}-client-sa-policy",
+        namespace=namespace,
+    )
+    assert client_app_auth_policy is not None, (
+        f"Authorization policy letting client app {namespace}:client-sa reach the driver for "
+        f"service account {TEST_SERVICE_ACCOUNT} was not created."
+    )
+
+
 def test_delete_monitored_service_account(client: Client, namespace: str):
     """Test deleting a Spark service account."""
     delete_service_account(username=TEST_SERVICE_ACCOUNT, namespace=namespace)
+    wait_until(
+        lambda: (
+            get_resource(
+                client,
+                resource=Secret,
+                name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}",
+                namespace=namespace,
+            )
+            is None
+        ),
+        description="Waiting for the integration hub secret to be deleted.",
+    )
     secret = get_resource(
         client,
         resource=Secret,
@@ -392,4 +450,32 @@ def test_delete_monitored_service_account(client: Client, namespace: str):
     )
     assert secret is None, (
         f"Integration Hub secret for service account {TEST_SERVICE_ACCOUNT} was not deleted."
+    )
+    driver_auth_policy = get_resource(
+        client,
+        resource=AuthorizationPolicy,
+        name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-driver-policy",
+        namespace=namespace,
+    )
+    assert driver_auth_policy is None, (
+        f"Authorization policy for Spark driver for service account {TEST_SERVICE_ACCOUNT} was not deleted."
+    )
+    executor_auth_policy = get_resource(
+        client,
+        resource=AuthorizationPolicy,
+        name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-executor-policy",
+        namespace=namespace,
+    )
+    assert executor_auth_policy is None, (
+        f"Authorization policy for Spark executor for service account {TEST_SERVICE_ACCOUNT} was not deleted."
+    )
+    client_app_auth_policy = get_resource(
+        client,
+        resource=AuthorizationPolicy,
+        name=f"integrator-hub-conf-{TEST_SERVICE_ACCOUNT}-{namespace}-client-sa-policy",
+        namespace=namespace,
+    )
+    assert client_app_auth_policy is None, (
+        f"Authorization policy for client app service account {namespace}:client-sa for service account "
+        f"{TEST_SERVICE_ACCOUNT} was not deleted."
     )
