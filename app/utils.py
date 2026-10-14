@@ -17,7 +17,7 @@ import httpx2
 from lightkube import Client
 from lightkube.core.resource import NamespacedResource
 from lightkube.exceptions import ApiError
-from lightkube.models.meta_v1 import ObjectMeta
+from lightkube.models.meta_v1 import ObjectMeta, OwnerReference
 from lightkube.resources.core_v1 import Secret
 from spark8t.domain import PropertyFile
 
@@ -125,7 +125,7 @@ def get_allowlist(file_path: Path) -> list[str]:
     return allowlist
 
 
-def service_account_owner_reference(service_account: str, uid: str) -> dict[str, str]:
+def service_account_owner_reference(service_account: str, uid: str) -> OwnerReference:
     """Build an owner reference tying a resource's lifecycle to a workload service account.
 
     When the service account is deleted, the Kubernetes garbage collector cascades the
@@ -137,14 +137,14 @@ def service_account_owner_reference(service_account: str, uid: str) -> dict[str,
         uid (str): The UID of the owning service account.
 
     Returns:
-        dict[str, str]: An ownerReferences entry for the service account.
+        OwnerReference: The owner reference for the service account.
     """
-    return {
-        "apiVersion": "v1",
-        "kind": "ServiceAccount",
-        "name": service_account,
-        "uid": uid,
-    }
+    return OwnerReference(
+        apiVersion="v1",
+        kind="ServiceAccount",
+        name=service_account,
+        uid=uid,
+    )
 
 
 def get_integration_hub_secret(
