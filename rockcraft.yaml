@@ -21,6 +21,18 @@ environment:
   JAVA_HOME: /usr/lib/jvm/java-17-openjdk-${CRAFT_ARCH_BUILD_FOR}
 
 services:
+  spark-ui-index-server:
+    command: "python3 -m app.spark_ui_index"
+    summary: "Read-only Spark application index (configured by the charm)."
+    override: replace
+    startup: disabled
+    on-failure: restart
+  spark-ui-controller:
+    command: "python3 -m app.spark_ui"
+    summary: "Spark driver Pod watcher and UI route controller (configured by the charm)."
+    override: replace
+    startup: disabled
+    on-failure: restart
   integration-hub:
     command: "/bin/bash opt/hub/bin/monitor_sa.sh"
     summary: "This is the service to startup the process that monitor Spark8t's service accounts."
