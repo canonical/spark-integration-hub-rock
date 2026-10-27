@@ -22,13 +22,13 @@ environment:
 
 services:
   spark-ui-index-server:
-    command: "python3 -m app.spark_ui_index"
+    command: "python3 -m app.ui_server"
     summary: "Read-only Spark application index (configured by the charm)."
     override: replace
     startup: disabled
     on-failure: restart
   spark-ui-controller:
-    command: "python3 -m app.spark_ui"
+    command: "python3 -m app.ui_controller"
     summary: "Spark driver Pod watcher and UI route controller (configured by the charm)."
     override: replace
     startup: disabled

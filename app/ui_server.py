@@ -16,7 +16,7 @@ from lightkube import ApiError, Client
 from lightkube.core.exceptions import ConfigError
 from lightkube.generic_resource import GenericNamespacedResource
 
-from app.spark_ui import SPARK_APP_LABEL, UI_INTEGRATION_HUB_LABEL, HTTPRoute, UIConfig
+from app.ui_controller import SPARK_APP_LABEL, UI_INTEGRATION_HUB_LABEL, HTTPRoute, UIConfig
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +49,8 @@ def render_index(config: UIConfig, routes: list[GenericNamespacedResource]) -> s
         '<!doctype html><html><head><meta charset="utf-8">'
         "<title>Spark applications</title></head><body>"
         "<h1>Spark applications</h1>"
-        "<p>Refresh to update. Each application can contain multiple Spark jobs.</p>"
-        "<p>Listed routes do not guarantee UI readiness; startup may return 503.</p>"
+        "<p>Refresh to update.</p>"
+        "<p>note: Listed routes do not guarantee UI readiness; pod startup may still return 503.</p>"
         f"<p>{message}</p><table><thead><tr><th>Namespace</th>"
         "<th>Application ID</th><th>UI</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></body></html>"
