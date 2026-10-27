@@ -16,7 +16,13 @@ from lightkube import ApiError, Client
 from lightkube.core.exceptions import ConfigError
 from lightkube.generic_resource import GenericNamespacedResource
 
-from app.ui_controller import SPARK_APP_LABEL, UI_INTEGRATION_HUB_LABEL, HTTPRoute, UIConfig
+from app.ui_controller import (
+    SPARK_APP_LABEL,
+    SPARK_APP_NAME_ANNOTATION,
+    UI_INTEGRATION_HUB_LABEL,
+    HTTPRoute,
+    UIConfig,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,24 +42,31 @@ def render_index(config: UIConfig, routes: list[GenericNamespacedResource]) -> s
         if not app_id or route.metadata.deletionTimestamp:
             continue
         namespace = route.metadata.namespace
+        app_name = (route.metadata.annotations or {}).get(SPARK_APP_NAME_ANNOTATION) or "Unknown"
         url = f"{config.external_url}/{namespace}/{app_id}/"
         rows.append(
-            f"<tr><td>{escape(namespace)}</td><td>{escape(app_id)}</td>"
+            f"<tr><td>{escape(namespace)}</td><td>{escape(app_name)}</td><td>{escape(app_id)}</td>"
             f'<td><a href="{escape(url, quote=True)}" target="_blank" rel="noopener noreferrer">'
             "Open UI</a></td></tr>"
         )
     message = "No application routes found." if not rows else ""
     if not config.external_url or not config.gateway:
         message = "UI exposure disabled. Connect ingress and gateway-metadata."
+    message_html = f"<p>{message}</p>" if message else ""
     return (
-        '<!doctype html><html><head><meta charset="utf-8">'
-        "<title>Spark applications</title></head><body>"
-        "<h1>Spark applications</h1>"
-        "<p>Refresh to update.</p>"
-        "<p>note: Listed routes do not guarantee UI readiness; pod startup may still return 503.</p>"
-        f"<p>{message}</p><table><thead><tr><th>Namespace</th>"
-        "<th>Application ID</th><th>UI</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table></body></html>"
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        "<title>Active Spark applications</title></head><body>"
+        "<h1>Active Spark applications</h1>"
+        f"{message_html}"
+        '<table border="1" cellpadding="8" cellspacing="0" width="80%">'
+        "<thead><tr>"
+        '<th scope="col">Namespace</th><th scope="col">Application Name</th>'
+        '<th scope="col">Application ID</th><th scope="col">UI Link</th></tr></thead>'
+        f"<tbody>{''.join(rows)}</tbody></table>"
+        "<p><i>Listed routes do not guarantee UI readiness; driver startup may still return 503.</i></p>"
+        "<p><i>Refresh the page to reload the list.</i></p>"
+        "</body></html>"
     )
 
 

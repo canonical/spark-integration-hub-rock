@@ -33,6 +33,8 @@ from app.utils import (
 logger = logging.getLogger(__name__)
 UI_INTEGRATION_HUB_LABEL = "spark.canonical.com/ui-integration-hub"
 SPARK_APP_LABEL = "spark-app-selector"
+SPARK_APP_NAME_LABEL = "spark-app-name"
+SPARK_APP_NAME_ANNOTATION = "spark.canonical.com/spark-app-name"
 HTTPRoute = create_namespaced_resource(
     "gateway.networking.k8s.io", "v1", "HTTPRoute", "httproutes"
 )
@@ -59,6 +61,7 @@ def route_resource(
     assert pod.metadata and pod.metadata.labels and service.metadata and config.gateway
     assert service.metadata.uid and service.metadata.namespace and service.metadata.name
     app_id = pod.metadata.labels[SPARK_APP_LABEL]
+    app_name = pod.metadata.labels.get(SPARK_APP_NAME_LABEL)
     prefix = f"{config.prefix}/{service.metadata.namespace}/{app_id}"
     suffix = hashlib.sha256(service.metadata.uid.encode()).hexdigest()[:16]
     parsed = urlsplit(config.external_url or "")
@@ -73,6 +76,7 @@ def route_resource(
                 UI_INTEGRATION_HUB_LABEL: config.owner,
                 SPARK_APP_LABEL: app_id,
             },
+            "annotations": ({SPARK_APP_NAME_ANNOTATION: app_name} if app_name else {}),
             # important -- set Service as the owner, such that this gets auto cleaned up when service goes down
             "ownerReferences": [
                 {
