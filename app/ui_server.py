@@ -44,7 +44,7 @@ def render_index(config: UIConfig, routes: list[GenericNamespacedResource]) -> s
         )
     message = "No application routes found." if not rows else ""
     if not config.external_url or not config.gateway:
-        message = "Exposure disabled. Connect ingress and gateway-metadata."
+        message = "UI exposure disabled. Connect ingress and gateway-metadata."
     return (
         '<!doctype html><html><head><meta charset="utf-8">'
         "<title>Spark applications</title></head><body>"

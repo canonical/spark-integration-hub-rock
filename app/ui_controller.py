@@ -73,6 +73,7 @@ def route_resource(
                 UI_INTEGRATION_HUB_LABEL: config.owner,
                 SPARK_APP_LABEL: app_id,
             },
+            # important -- set Service as the owner, such that this gets auto cleaned up when service goes down
             "ownerReferences": [
                 {
                     "apiVersion": "v1",
