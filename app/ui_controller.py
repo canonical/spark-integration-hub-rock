@@ -47,6 +47,7 @@ class UIConfig:
     owner: str
     external_url: str | None
     gateway: dict[str, str] | None
+    authorized_users: str | None = None
 
     @property
     def prefix(self) -> str:

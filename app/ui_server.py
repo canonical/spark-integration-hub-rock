@@ -5,10 +5,12 @@
 
 import json
 import logging
+import mimetypes
 import os
 from html import escape
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from string import Template
 from urllib.parse import urlsplit
 
 from httpx2 import HTTPError
@@ -25,6 +27,11 @@ from app.ui_controller import (
 )
 
 logger = logging.getLogger(__name__)
+INDEX_TEMPLATE = Template((Path(__file__).parent / "index.html").read_text(encoding="utf-8"))
+STATIC_DIR = Path(__file__).parent / "static"
+STATIC_FILES = {
+    path.name: path for path in STATIC_DIR.iterdir() if path.suffix in (".css", ".woff2")
+}
 
 
 def render_index(config: UIConfig, routes: list[GenericNamespacedResource]) -> str:
@@ -45,29 +52,56 @@ def render_index(config: UIConfig, routes: list[GenericNamespacedResource]) -> s
         app_name = (route.metadata.annotations or {}).get(SPARK_APP_NAME_ANNOTATION) or "Unknown"
         url = f"{config.external_url}/{namespace}/{app_id}/"
         rows.append(
-            f"<tr><td>{escape(namespace)}</td><td>{escape(app_name)}</td><td>{escape(app_id)}</td>"
-            f'<td><a href="{escape(url, quote=True)}" target="_blank" rel="noopener noreferrer">'
-            "Open UI</a></td></tr>"
+            f'<tr><td>{escape(namespace)}</td><th scope="row">{escape(app_name)}</th>'
+            f"<td><code>{escape(app_id)}</code></td>"
+            f'<td class="ui-actions"><a class="p-button" href="{escape(url, quote=True)}" '
+            'target="_blank" rel="noopener noreferrer" '
+            f'aria-label="Open UI for {escape(app_name, quote=True)} (opens in a new tab)">'
+            'Open UI <i class="p-icon--external-link">Opens in a new tab</i></a></td></tr>'
         )
-    message = "No application routes found." if not rows else ""
-    if not config.external_url or not config.gateway:
-        message = "UI exposure disabled. Connect ingress and gateway-metadata."
-    message_html = f"<p>{message}</p>" if message else ""
-    return (
-        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        "<title>Active Spark applications</title></head><body>"
-        "<h1>Active Spark applications</h1>"
-        f"{message_html}"
-        '<table border="1" cellpadding="8" cellspacing="0" width="80%">'
-        "<thead><tr>"
-        '<th scope="col">Namespace</th><th scope="col">Application Name</th>'
-        '<th scope="col">Application ID</th><th scope="col">UI Link</th></tr></thead>'
-        f"<tbody>{''.join(rows)}</tbody></table>"
-        "<p><i>Listed routes do not guarantee UI readiness; driver startup may still return 503.</i></p>"
-        "<p><i>Refresh the page to reload the list.</i></p>"
-        "</body></html>"
+    message = "No running applications" if not rows else ""
+    detail = (
+        "Submit a Spark application using a monitored service account, then refresh this page."
     )
+    if not config.external_url or not config.gateway:
+        message = "UI exposure is not configured"
+        detail = "Connect ingress and gateway-metadata to enable application UI access."
+    return INDEX_TEMPLATE.substitute(
+        asset_base=escape(f"{config.prefix}/static", quote=True),
+        refresh_url=escape(f"{config.prefix}/", quote=True),
+        route_count=len(rows),
+        route_rows="".join(rows),
+        empty_state_hidden="" if message else "hidden",
+        table_hidden="" if rows else "hidden",
+        message=escape(message),
+        detail=escape(detail),
+    )
+
+
+def _respond(handler: BaseHTTPRequestHandler, body: bytes, content_type: str) -> None:
+    """Send index HTML or a locally bundled asset."""
+    handler.send_response(200)
+    handler.send_header("Content-Type", content_type)
+    handler.send_header("Content-Length", str(len(body)))
+    handler.send_header("Cache-Control", "no-store")
+    handler.send_header("X-Content-Type-Options", "nosniff")
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def _serve_asset(handler: BaseHTTPRequestHandler, name: str) -> None:
+    """Serve only packaged assets; never resolve a request as a file path."""
+    asset = STATIC_FILES.get(name)
+    if asset is None:
+        handler.send_error(404, "Asset not found")
+        return
+    try:
+        body = asset.read_bytes()
+    except OSError:
+        logger.exception("Unable to read index asset: %s", asset.name)
+        handler.send_error(503, "Unable to retrieve index asset")
+        return
+    _respond(handler, body, mimetypes.guess_type(asset.name)[0] or "application/octet-stream")
 
 
 def make_handler(config: UIConfig) -> type[BaseHTTPRequestHandler]:
@@ -78,7 +112,21 @@ def make_handler(config: UIConfig) -> type[BaseHTTPRequestHandler]:
 
         def do_GET(self) -> None:
             """Fetch the hub's route list on demand, failing explicitly on API errors."""
-            if urlsplit(self.path).path not in ("/", config.prefix, config.prefix + "/"):
+            if config.authorized_users is not None:
+                identity = self.headers.get("X-Auth-Request-Email")
+                allowed = config.authorized_users.split(",")
+                if not identity or ("*" not in allowed and identity not in allowed):
+                    logger.warning(
+                        "Denied Spark UI index request: identity missing or unauthorized"
+                    )
+                    self.send_error(403, "User is not authorized to view Spark UIs")
+                    return
+            path = urlsplit(self.path).path
+            for prefix in ("/static/", f"{config.prefix}/static/"):
+                if path.startswith(prefix):
+                    _serve_asset(self, path.removeprefix(prefix))
+                    return
+            if path not in ("/", config.prefix, config.prefix + "/"):
                 self.send_error(404, "Application route unavailable; it may have finished.")
                 return
             routes = []
@@ -96,13 +144,7 @@ def make_handler(config: UIConfig) -> type[BaseHTTPRequestHandler]:
                     self.send_error(503, "Unable to retrieve application routes")
                     return
             body = render_index(config, routes).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("X-Content-Type-Options", "nosniff")
-            self.end_headers()
-            self.wfile.write(body)
+            _respond(self, body, "text/html; charset=utf-8")
 
         def log_message(self, fmt: str, *args: object) -> None:
             """Send HTTP request logs to Pebble."""

@@ -24,3 +24,21 @@ This will create a `.rock` file that is an OCI compliant image. To upload the fi
 ```bash
 sudo rockcraft.skopeo --insecure-policy copy oci-archive:<file> docker-daemon:<image>:<tag>
 ```
+
+## Application index
+
+The live application index uses Canonical's Vanilla Framework 4.30.0, with
+responsive tables, Ubuntu typography and accessible links to driver UIs.
+It styles the Hub's index only; each driver's native Spark UI remains unchanged.
+Refresh the index to discover newly created application routes.
+Page markup lives in `app/index.html`; `ui_server.py` fills its standard-library
+`string.Template` placeholders with escaped values and rendered route rows.
+The template is loaded at startup and included by the `hub-app` packaging part.
+
+CSS and fonts are bundled in `app/static` and served locally,
+including behind an ingress path prefix. There are no runtime CDN requests.
+Unused Vanilla decorative background images are excluded; embedded icons remain.
+OAuth2 identity checks also apply to these asset requests when authentication is
+enabled. Third-party licenses and asset provenance are included in that directory.
+The existing `hub-app` packaging part includes the assets automatically.
+Rebuild and deploy the rock to make index changes available.
