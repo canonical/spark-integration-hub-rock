@@ -1,0 +1,22 @@
+/* Copyright 2026 Canonical Ltd. See LICENSE file for licensing details. */
+body { min-height: 100vh; display: flex; flex-direction: column; }
+main { flex: 1; }
+.ui-header { background: #262626; color: #fff; padding: 1.25rem 0; }
+.ui-header .row { display: flex; align-items: center; gap: 1.5rem; }
+.ui-brand { border-right: 1px solid #666; padding-right: 1.5rem; font-size: 1.25rem; }
+.ui-toolbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.ui-toolbar h1 { margin-top: 0; }
+.ui-toolbar .p-button { white-space: nowrap; }
+.ui-table { position: relative; overflow-x: auto; }
+.ui-table table { min-width: 48rem; }
+.ui-table th, .ui-table td { white-space: normal; }
+.ui-table code { white-space: nowrap; overflow-wrap: normal; }
+.ui-actions { text-align: right; }
+.ui-actions .p-button { margin: 0; white-space: nowrap; }
+.ui-notice { margin-top: 2rem; }
+.ui-empty { padding: 2rem; }
+@media (max-width: 620px) {
+  .ui-toolbar { flex-direction: column; }
+  .ui-header .row { gap: .75rem; }
+  .ui-brand { padding-right: .75rem; }
+}

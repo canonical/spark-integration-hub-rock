@@ -1,0 +1,65 @@
+<!doctype html>
+<!-- Copyright 2026 Canonical Ltd. See LICENSE file for licensing details. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Running applications | Spark Integration Hub</title>
+    <link rel="stylesheet" href="${asset_base}/vanilla-4.30.0.min.css">
+    <link rel="stylesheet" href="${asset_base}/index.css">
+  </head>
+  <body>
+    <a class="p-link--skip" href="#main-content">Skip to content</a>
+    <header class="ui-header">
+      <div class="row">
+        <span class="ui-brand">Canonical</span>
+        <span>Spark Integration Hub</span>
+      </div>
+    </header>
+    <main id="main-content" class="p-strip">
+      <div class="row">
+        <div class="col-12">
+          <div class="ui-toolbar">
+            <div>
+              <h1>Running Spark applications</h1>
+              <p class="p-heading--5">Discover and monitor your live Spark workloads.</p>
+            </div>
+            <a class="p-button" href="${refresh_url}">Refresh</a>
+          </div>
+          <p class="p-text--small">${route_count} active application routes</p>
+          <div class="p-card ui-empty" ${empty_state_hidden}>
+            <h2 class="p-heading--4">${message}</h2>
+            <p>${detail}</p>
+          </div>
+          <div class="ui-table" tabindex="0" role="region" aria-label="Application list" ${table_hidden}>
+            <table class="u-table-layout--auto">
+              <caption class="u-off-screen">Application routes and live UI links</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Namespace</th>
+                  <th scope="col">Application name</th>
+                  <th scope="col">Application ID</th>
+                  <th scope="col"><span class="u-off-screen">UI link</span></th>
+                </tr>
+              </thead>
+              <tbody>${route_rows}</tbody>
+            </table>
+          </div>
+          <div class="p-notification--information ui-notice">
+            <div class="p-notification__content">
+              <p class="p-notification__message">
+                Routes do not guarantee UI readiness. An application starting up may temporarily
+                return 503. Use Spark History Server to inspect completed applications.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+    <footer class="p-strip--light">
+      <div class="row">
+        <p class="p-text--small">Charmed Apache Spark &middot; Live application monitoring</p>
+      </div>
+    </footer>
+  </body>
+</html>
